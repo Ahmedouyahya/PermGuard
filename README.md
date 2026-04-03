@@ -115,6 +115,40 @@ systemctl --user restart permguard
 
 ---
 
+## Performance
+
+PermGuard is designed to consume as close to zero resources as possible when nothing is happening.
+
+### Event-driven camera monitoring (inotify)
+
+The camera monitor uses the Linux **inotify** kernel API instead of polling. It registers `IN_OPEN` watches on `/dev/video*` devices and blocks in `select()` until the kernel wakes it up — literally 0% CPU when no camera is in use. When a device is opened, it wakes up in under a millisecond, scans `/proc/<pid>/fd` to identify the process, and goes back to sleep.
+
+### Direct kernel interface reads (no subprocesses)
+
+Earlier versions spawned subprocesses for every data query. These were replaced with direct reads from Linux kernel interfaces:
+
+| Data | Old method | New method | Latency |
+|---|---|---|---|
+| Camera PIDs | `fuser /dev/video*` | `/proc/<pid>/fd` symlink scan | 57ms → 9ms |
+| Network connections | `ss -tunp` | `/proc/net/tcp` + `/proc/net/tcp6` | 18ms → 10ms |
+| Open ports | `ss -tlnp` | `/proc/net/tcp` (filter LISTEN) | 28ms → 10ms |
+| USB devices | — | `/sys/bus/usb/devices/*/authorized` | ~1ms |
+| Microphone streams | `pactl` | `pactl` (kept — already 4ms) | 4ms |
+
+Network parsing reads raw hex addresses directly from the kernel's TCP table and maps socket inodes to PIDs via `/proc/<pid>/fd` — no external tools needed.
+
+### CPU profile at idle
+
+| Monitor | Method | CPU when idle |
+|---|---|---|
+| Camera | inotify `IN_OPEN` | ~0% (blocked in select) |
+| Microphone | pactl poll every 1s | ~0.1% |
+| File access | inotify `IN_OPEN` | ~0% (blocked in select) |
+| Package install | /proc poll every 2s | ~0.05% |
+| UI refresh | 5s timer | ~0% |
+
+---
+
 ## Known limitations
 
 ### File access — notification vs. enforcement
