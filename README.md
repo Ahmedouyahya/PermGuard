@@ -1,8 +1,34 @@
 # 🛡 PermGuard
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)]()
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)]()
+[![KDE Plasma](https://img.shields.io/badge/KDE-Plasma%206-blue.svg)]()
+
 **Android-like privacy & permission manager for Linux/KDE**
 
 PermGuard watches your system in real-time. The moment an app tries to use your **camera** or **microphone**, a popup appears — just like on Android — asking you what to do. You choose, PermGuard remembers. Every app, every resource, under your control.
+
+---
+
+## Install
+
+```bash
+git clone https://github.com/Ahmedouyahya/PermGuard.git && cd PermGuard && bash install.sh
+```
+
+That's it. The installer handles everything automatically. Then run:
+
+```bash
+permguard
+```
+
+Or search **PermGuard** in your app menu.
+
+**Uninstall:**
+```bash
+bash install.sh --uninstall
+```
 
 ---
 
@@ -129,31 +155,48 @@ When an unknown app accesses a resource, PermGuard shows this floating dialog (a
 
 ## Installation
 
-### One command
+### Requirements
 
+- Linux (Debian / Ubuntu / Parrot OS or any derivative)
+- Python 3.10+
+- KDE Plasma 5/6 or GNOME (any desktop with a system tray)
+
+Everything else is installed automatically.
+
+### Step by step
+
+**1. Clone the repo**
 ```bash
-git clone https://github.com/Ahmedouyahya/PermGuard.git && cd PermGuard && bash install.sh
+git clone https://github.com/Ahmedouyahya/PermGuard.git
+cd PermGuard
 ```
 
-The installer:
-1. Checks Python 3.10+
-2. Installs missing system packages via `apt` (PyQt6, fuser, pactl, lsusb, etc.)
-3. Copies app files to `~/.local/share/permguard/`
-4. Creates the `permguard` command at `~/.local/bin/permguard`
-5. Adds app menu entry (searchable as "PermGuard")
-
-### Run
-
+**2. Run the installer**
 ```bash
-permguard          # terminal
-# or search "PermGuard" in your app menu
+bash install.sh
 ```
+
+The installer will:
+- Install missing system packages via `apt` — PyQt6, fuser, pactl, lsusb, notify-send
+- Copy app files to `~/.local/share/permguard/`
+- Create a `permguard` command at `~/.local/bin/permguard`
+- Add PermGuard to your app menu
+
+**3. Launch**
+```bash
+permguard
+```
+Or search **PermGuard** in your app menu / launcher.
+
+> If the `permguard` command is not found right after install, close and reopen your terminal — the PATH update needs a new shell session.
 
 ### Uninstall
 
 ```bash
 bash install.sh --uninstall
 ```
+
+Removes all files, the command, and the app menu entry. Your saved permission rules in `~/.local/share/permguard/` are also deleted.
 
 ---
 
@@ -202,4 +245,12 @@ Bug reports and feature requests welcome via [GitHub Issues](https://github.com/
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+**MIT License** — free to use, modify, and distribute. See [LICENSE](LICENSE) for the full text.
+
+```
+Copyright (c) 2026 PermGuard Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, without restriction.
+```
