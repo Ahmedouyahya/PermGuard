@@ -132,6 +132,23 @@ EOF
 update-desktop-database "$APPS_DIR" 2>/dev/null || true
 ok "App menu entry created"
 
+# ── Autostart at login (enabled by default) ───────────────────────────────────
+info "Enabling autostart at login..."
+AUTOSTART_DIR="$HOME/.config/autostart"
+mkdir -p "$AUTOSTART_DIR"
+cat > "$AUTOSTART_DIR/permguard.desktop" <<EOF
+[Desktop Entry]
+Name=PermGuard
+Comment=PermGuard privacy monitor
+Exec=$BIN_DIR/permguard
+Icon=$INSTALL_DIR/assets/icon.svg
+Terminal=false
+Type=Application
+X-KDE-autostart-after=panel
+X-GNOME-Autostart-enabled=true
+EOF
+ok "Autostart enabled — PermGuard will launch at every login"
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${G}  ╔══════════════════════════════════════╗"
