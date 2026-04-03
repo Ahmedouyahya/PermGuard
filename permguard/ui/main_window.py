@@ -65,6 +65,27 @@ class MainWindow(QMainWindow):
 
     # ── Permission handling (called by monitors) ──────────────────────────────
 
+    # ── Process freeze / resume ───────────────────────────────────────────────
+
+    def _freeze(self, pid: str):
+        """SIGSTOP — suspend the process while user decides."""
+        try:
+            import os as _os, signal as _sig
+            _os.kill(int(pid), _sig.SIGSTOP)
+            self.db.log(f"Frozen PID {pid} pending decision")
+        except Exception:
+            pass   # process may be root-owned or already gone — continue anyway
+
+    def _thaw(self, pid: str):
+        """SIGCONT — resume a previously frozen process."""
+        try:
+            import os as _os, signal as _sig
+            _os.kill(int(pid), _sig.SIGCONT)
+        except Exception:
+            pass
+
+    # ── Permission handling (called by monitors) ──────────────────────────────
+
     def handle_access(self, evt):
         """Called when a monitor detects a new access attempt."""
         decision = self.db.get(evt.app_name, evt.resource)
@@ -75,7 +96,8 @@ class MainWindow(QMainWindow):
             self.db.log(f"Auto-denied: {evt.app_name} → {evt.resource} (PID {evt.pid})")
             self._enforce_deny(evt)
             return
-        # ASK — queue a dialog
+        # ASK — freeze immediately so the app has no access while we ask
+        self._freeze(evt.pid)
         self._dialog_queue.append(evt)
         if self._active_dialog is None:
             self._show_next_dialog()
@@ -101,11 +123,14 @@ class MainWindow(QMainWindow):
             if remember and decision in (ALLOW, DENY):
                 self.db.set(evt.app_name, evt.resource, decision)
                 self._perm_tab.refresh()
-            if decision == DENY:
+            if decision in (ALLOW, DECISION_ONCE):
+                # User allowed — unfreeze so the app can proceed
+                self._thaw(evt.pid)
+            else:
+                # User denied — kill it (SIGKILL works on stopped processes)
                 self._enforce_deny(evt)
             self._active_dialog = None
-            self._show_next_dialog()   # show next queued dialog
-            # tray notification
+            self._show_next_dialog()
             if self._tray_ok:
                 verb = "allowed" if decision in (ALLOW, DECISION_ONCE) else "denied"
                 self._tray.showMessage(

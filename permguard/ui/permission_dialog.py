@@ -125,7 +125,7 @@ class PermissionDialog(QDialog):
         perm_label.setFont(QFont("Inter", 11, QFont.Weight.Bold))
         perm_label.setStyleSheet(
             f"color: {meta['color']}; letter-spacing: 0.3px; background: transparent;")
-        self._countdown_lbl = QLabel(f"Auto-deny in {self._countdown}s")
+        self._countdown_lbl = QLabel(f"Frozen — auto-deny in {self._countdown}s")
         self._countdown_lbl.setStyleSheet(
             f"color: {C['muted']}; font-size: 11px; background: transparent;")
         header_text.addWidget(perm_label)
@@ -213,7 +213,7 @@ class PermissionDialog(QDialog):
 
     def _tick(self):
         self._countdown -= 1
-        self._countdown_lbl.setText(f"Auto-deny in {self._countdown}s")
+        self._countdown_lbl.setText(f"Frozen — auto-deny in {self._countdown}s")
         self._progress.setValue(self._countdown)
         # Shift progress bar color as time runs out
         if self._countdown <= 10:
