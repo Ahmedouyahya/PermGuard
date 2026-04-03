@@ -158,18 +158,29 @@ def set_camera_blocked(block: bool) -> tuple[bool, str]:
 
 # ── Microphone control ────────────────────────────────────────────────────────
 
+def _pactl_available() -> bool:
+    import shutil
+    return shutil.which("pactl") is not None
+
+
 def mic_source_indices() -> list[str]:
+    if not _pactl_available():
+        return []
     out = run(["pactl", "list", "sources", "short"])
     return [line.split()[0] for line in out.splitlines() if line.strip()]
 
 
 def mic_is_suspended() -> bool:
+    if not _pactl_available():
+        return False
     out = run(["pactl", "list", "sources", "short"])
     lines = [l for l in out.splitlines() if l.strip()]
     return bool(lines) and all("SUSPENDED" in l for l in lines)
 
 
 def set_mic_suspended(suspend: bool) -> tuple[bool, str]:
+    if not _pactl_available():
+        return False, "pactl not found — install pulseaudio-utils (apt) or pulseaudio (dnf/pacman)"
     val = "1" if suspend else "0"
     indices = mic_source_indices()
     if not indices:

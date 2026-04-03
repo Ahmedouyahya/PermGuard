@@ -120,8 +120,11 @@ def get_camera_users() -> list[tuple]:
 # ── Microphone ────────────────────────────────────────────────────────────────
 
 def get_mic_streams() -> list[dict]:
-    """PipeWire/PulseAudio source-output streams (via pactl — already 4ms, kept)."""
+    """PipeWire/PulseAudio source-output streams (via pactl)."""
+    import shutil
     results: list[dict] = []
+    if not shutil.which("pactl"):
+        return results
     out = run(["pactl", "list", "source-outputs"])
     for block in out.split("Source Output #")[1:]:
         idx_m  = re.match(r"(\d+)", block)
@@ -151,11 +154,25 @@ def get_mic_users() -> list[tuple]:
 # ── Screen share ──────────────────────────────────────────────────────────────
 
 def get_screen_share() -> list[tuple]:
+    import shutil
     results = []
-    out = run(["pw-cli", "list-objects", "PipeWire:Interface:Node"])
-    for line in out.splitlines():
-        if any(k in line.lower() for k in ("screencast", "screen-cast", "xdg-desktop-portal")):
-            results.append(("—", "Screen Recording Session", line.strip()[:70]))
+    if shutil.which("pw-cli"):
+        out = run(["pw-cli", "list-objects", "PipeWire:Interface:Node"])
+        for line in out.splitlines():
+            if any(k in line.lower() for k in ("screencast", "screen-cast", "xdg-desktop-portal")):
+                results.append(("—", "Screen Recording Session (PipeWire)", line.strip()[:70]))
+    # Fallback: check /proc for xdg-desktop-portal processes with screen access
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            comm = Path(f"/proc/{pid}/comm").read_text().strip()
+            if "xdg-desktop-portal" in comm:
+                cmdline = Path(f"/proc/{pid}/cmdline").read_text().replace("\x00", " ").strip()
+                if "screencast" in cmdline.lower() or "screen" in cmdline.lower():
+                    results.append((pid, comm, cmdline[:70]))
+        except OSError:
+            pass
     return results
 
 

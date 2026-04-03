@@ -33,15 +33,17 @@ AUTOSTART_FILE = AUTOSTART_DIR / "permguard.desktop"
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, db: PermissionDB, parent=None):
+    def __init__(self, db: PermissionDB, app_icon: QIcon = None, parent=None):
         super().__init__(parent)
-        self.db           = db
-        self._dialog_queue = deque()   # queued AccessEvents waiting for dialog
+        self.db            = db
+        self._dialog_queue = deque()
         self._active_dialog = None
-        self._prev_cam    = set()
-        self._prev_mic    = set()
+        self._prev_cam     = set()
+        self._prev_mic     = set()
+        self._app_icon     = app_icon or QIcon()
 
         self.setWindowTitle("PermGuard — Privacy Manager")
+        self.setWindowIcon(self._app_icon)
         self.setMinimumSize(1100, 660)
         self.resize(1280, 740)
         self.setStyleSheet(MAIN_STYLE)
@@ -54,8 +56,12 @@ class MainWindow(QMainWindow):
         self._timer.timeout.connect(self._auto_refresh)
         self._timer.start(5000)
 
-        signal.signal(signal.SIGTERM, lambda *_: self._quit())
-        signal.signal(signal.SIGINT,  lambda *_: self._quit())
+        # Signal handlers registered in main() before Qt starts, but keep here as fallback
+        try:
+            signal.signal(signal.SIGTERM, lambda *_: self._quit())
+            signal.signal(signal.SIGINT,  lambda *_: self._quit())
+        except (OSError, ValueError):
+            pass  # not in main thread or already registered
 
     # ── Permission handling (called by monitors) ──────────────────────────────
 
@@ -139,8 +145,8 @@ class MainWindow(QMainWindow):
         bl.setContentsMargins(20, 0, 20, 0)
         bl.setSpacing(10)
 
-        from .. import __version__
-        logo = QLabel(f"🛡  PermGuard  v{__version__}")
+        from .. import __version__ as _ver
+        logo = QLabel(f"🛡  PermGuard  v{_ver}")
         logo.setFont(QFont("Inter", 14, QFont.Weight.Bold))
         logo.setStyleSheet(f"color:{C['accent']}; background:transparent;")
 
@@ -198,8 +204,9 @@ class MainWindow(QMainWindow):
 
     def _setup_tray(self):
         self._tray = QSystemTrayIcon(self)
-        self._tray.setIcon(QIcon.fromTheme("security-high",
-                           QIcon.fromTheme("dialog-password")))
+        self._tray.setIcon(self._app_icon if not self._app_icon.isNull()
+                           else QIcon.fromTheme("security-high",
+                                QIcon.fromTheme("dialog-password")))
         menu = QMenu()
         show_a = QAction("Show PermGuard", self)
         show_a.triggered.connect(self.show)

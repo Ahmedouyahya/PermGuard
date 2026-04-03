@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# PermGuard Installer
+# PermGuard Installer — works on Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE
 # Usage:
 #   bash install.sh              # install for current user
 #   bash install.sh --uninstall  # remove PermGuard
@@ -53,10 +53,39 @@ if [[ -d "$SCRIPT_DIR/.git" ]]; then
     fi
 fi
 
+# ── Detect package manager ────────────────────────────────────────────────────
+detect_pm() {
+    if   command -v apt-get &>/dev/null; then echo "apt"
+    elif command -v dnf     &>/dev/null; then echo "dnf"
+    elif command -v pacman  &>/dev/null; then echo "pacman"
+    elif command -v zypper  &>/dev/null; then echo "zypper"
+    else echo "unknown"
+    fi
+}
+
+install_pkg() {
+    # $1 = apt name, $2 = dnf name, $3 = pacman name, $4 = zypper name
+    local apt_n="$1" dnf_n="$2" pac_n="$3" zyp_n="$4"
+    case "$PM" in
+        apt)    sudo apt-get install -y "$apt_n" ;;
+        dnf)    sudo dnf install -y "$dnf_n" ;;
+        pacman) sudo pacman -S --noconfirm "$pac_n" ;;
+        zypper) sudo zypper install -y "$zyp_n" ;;
+        *)      warn "Unknown package manager — install $apt_n manually"; return 1 ;;
+    esac
+}
+
+PM=$(detect_pm)
+ok "Package manager: $PM"
+
 # ── Python check ──────────────────────────────────────────────────────────────
 info "Checking Python 3.10+..."
 PYTHON=$(command -v python3 || true)
-[[ -z "$PYTHON" ]] && fail "python3 not found. Run: sudo apt install python3"
+if [[ -z "$PYTHON" ]]; then
+    warn "python3 not found — trying to install..."
+    install_pkg python3 python3 python python3 || fail "Cannot install python3"
+    PYTHON=$(command -v python3)
+fi
 PY_VER=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 IFS='.' read -r MAJ MIN <<< "$PY_VER"
 [[ "$MAJ" -lt 3 || ( "$MAJ" -eq 3 && "$MIN" -lt 10 ) ]] && \
@@ -65,29 +94,51 @@ ok "Python $PY_VER"
 
 # ── System packages ───────────────────────────────────────────────────────────
 info "Installing system dependencies..."
-PKGS=()
-command -v fuser       &>/dev/null || PKGS+=(psmisc)
-command -v lsusb       &>/dev/null || PKGS+=(usbutils)
-command -v ss          &>/dev/null || PKGS+=(iproute2)
-command -v pactl       &>/dev/null || PKGS+=(pulseaudio-utils)
-command -v notify-send &>/dev/null || PKGS+=(libnotify-bin)
-python3 -c "import PyQt6" 2>/dev/null || PKGS+=(python3-pyqt6)
 
-if [[ ${#PKGS[@]} -gt 0 ]]; then
-    info "sudo apt install -y ${PKGS[*]}"
-    sudo apt install -y "${PKGS[@]}" || warn "Some packages failed — continuing"
+install_if_missing() {
+    local cmd="$1"; shift   # command to check
+    local apt="$1" dnf="$2" pac="$3" zyp="$4"
+    if ! command -v "$cmd" &>/dev/null; then
+        info "Installing $cmd ($apt / $dnf / $pac / $zyp)..."
+        install_pkg "$apt" "$dnf" "$pac" "$zyp" || warn "Could not install $cmd — some features may be unavailable"
+    fi
+}
+
+install_if_missing ss        iproute2          iproute          iproute2          iproute2
+install_if_missing pactl     pulseaudio-utils  pulseaudio-utils pulseaudio        pulseaudio-utils
+install_if_missing lsusb     usbutils          usbutils         usbutils          usbutils
+install_if_missing notify-send libnotify-bin   libnotify        libnotify         libnotify-tools
+
+# PyQt6
+if ! python3 -c "import PyQt6" 2>/dev/null; then
+    info "Installing PyQt6..."
+    case "$PM" in
+        apt)    sudo apt-get install -y python3-pyqt6 python3-pyqt6.qtsvg 2>/dev/null || \
+                    warn "PyQt6 not in apt — try: pip install PyQt6 --break-system-packages" ;;
+        dnf)    sudo dnf install -y python3-pyqt6 2>/dev/null || \
+                    warn "PyQt6 not in dnf — try: pip install PyQt6" ;;
+        pacman) sudo pacman -S --noconfirm python-pyqt6 2>/dev/null || \
+                    warn "PyQt6 install failed" ;;
+        zypper) sudo zypper install -y python3-PyQt6 2>/dev/null || \
+                    warn "PyQt6 install failed" ;;
+        *)      warn "Install PyQt6 manually: pip install PyQt6" ;;
+    esac
 fi
+
+# iptables or nftables (for firewall tab)
+if ! command -v iptables &>/dev/null && ! command -v nft &>/dev/null; then
+    install_if_missing iptables iptables iptables iptables iptables || true
+fi
+
 ok "System dependencies ready"
 
 # ── Copy app files ────────────────────────────────────────────────────────────
 info "Installing PermGuard to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR"
-# Copy the package (exclude __pycache__ and .pyc files)
 rsync -a --delete \
     --exclude="__pycache__" --exclude="*.pyc" --exclude="*.pyo" \
     "$SCRIPT_DIR/permguard/" "$INSTALL_DIR/permguard/"
 cp "$SCRIPT_DIR/run.py" "$INSTALL_DIR/"
-# Copy assets
 rsync -a "$SCRIPT_DIR/assets/" "$INSTALL_DIR/assets/"
 ok "Files copied"
 
@@ -145,9 +196,8 @@ sed "s|%h|$HOME|g" "$SCRIPT_DIR/permguard.service" > "$SYSTEMD_USER_DIR/permguar
 if systemctl --user daemon-reload 2>/dev/null; then
     systemctl --user enable permguard.service 2>/dev/null || true
     ok "Systemd service installed and enabled (auto-starts at login)"
-    info "Control with:  systemctl --user start|stop|restart|status permguard"
+    info "Control: systemctl --user start|stop|restart|status permguard"
 else
-    # Fallback to .desktop autostart if systemd user session unavailable
     warn "systemd user session not available — falling back to .desktop autostart"
     AUTOSTART_DIR="$HOME/.config/autostart"
     mkdir -p "$AUTOSTART_DIR"

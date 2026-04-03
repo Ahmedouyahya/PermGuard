@@ -62,6 +62,7 @@ class PermissionDialog(QDialog):
         self.resource = resource
         self.cmdline  = cmdline
         self._countdown = self.AUTO_DENY_SECS
+        self._decided_flag = False   # guard against double-fire
 
         self.setWindowFlags(
             Qt.WindowType.Dialog |
@@ -229,6 +230,9 @@ class PermissionDialog(QDialog):
     # ── Decision ──────────────────────────────────────────────────────────────
 
     def _decide(self, decision: str):
+        if self._decided_flag:
+            return
+        self._decided_flag = True
         self._timer.stop()
         remember = self._remember.isChecked() and decision != DECISION_ONCE
         self.decided.emit(decision, remember)

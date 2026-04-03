@@ -64,8 +64,12 @@ def _iptables_rule(action: str, uid: int) -> tuple[bool, str]:
     return ok1 and ok2, (e1 or e2)
 
 def iptables_available() -> bool:
-    ok, _ = run_privileged(["iptables", "-L", "OUTPUT", "-n"])
-    return ok
+    import shutil
+    # iptables (or iptables-nft wrapper used on modern Fedora/Debian)
+    if shutil.which("iptables"):
+        ok, _ = run_privileged(["iptables", "-L", "OUTPUT", "-n"])
+        return ok
+    return False
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
