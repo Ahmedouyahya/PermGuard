@@ -254,3 +254,14 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software to use, copy, modify, merge, publish, distribute, sublicense,
 and/or sell copies of the Software, without restriction.
 ```
+
+---
+
+<div align="center">
+
+**α ≈ 1/137**
+
+*The fine-structure constant — the number that governs how light and matter interact.*
+*Some things in the universe just control everything quietly in the background.*
+
+</div>
