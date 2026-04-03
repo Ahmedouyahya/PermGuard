@@ -116,11 +116,18 @@ def get_open_ports() -> list[tuple]:
 # ── USB devices ───────────────────────────────────────────────────────────────
 
 def get_usb_devices() -> list[tuple]:
+    """Return (bus, devnum, id, product, status) for the USB tab table."""
+    from .usb_control import get_usb_ports
     rows = []
-    for line in run(["lsusb"]).splitlines():
-        m = re.match(r"Bus (\d+) Device (\d+): ID ([0-9a-f:]+)\s+(.*)", line)
-        if m:
-            rows.append((f"Bus {m.group(1)}", f"Dev {m.group(2)}", m.group(3), m.group(4).strip()))
+    for p in get_usb_ports():
+        status = "enabled" if p["authorized"] else "DISABLED"
+        rows.append((
+            f"Bus {p['bus']}",
+            f"Dev {p['devnum']}",
+            f"{p['vendor_id']}:{p['product_id']}",
+            p["product"],
+            status,
+        ))
     return rows
 
 

@@ -22,6 +22,10 @@ from ..core.data  import (get_camera_users, get_mic_users, get_screen_share,
 from ..core.system import (camera_is_blocked, set_camera_blocked,
                             mic_is_suspended, set_mic_suspended, kill_pid)
 from ..core.permissions import PermissionDB, ALLOW, DENY, ASK, LOG_FILE
+from ..core.firewall   import (block_app, unblock_app, is_blocked,
+                                get_blocked_apps, clear_all_blocks,
+                                iptables_available, restore_rules_on_startup)
+from ..core.usb_control import get_usb_ports, set_authorized, disable_all_usb
 
 AUTOSTART_DIR  = Path.home() / ".config/autostart"
 AUTOSTART_FILE = AUTOSTART_DIR / "permguard.desktop"
@@ -153,13 +157,12 @@ class MainWindow(QMainWindow):
                                   get_mic_users,    ["PID","App Name","User","Command"], kill_col=0)
         self._scr_tab  = PermTab("🖥", "Screen Share", "Active screen recording / sharing",
                                   get_screen_share, ["PID","Service","Info"])
-        self._net_tab  = PermTab("🌐", "Network",      "Active connections per process",
-                                  get_network_conns,["PID","Process","State","Local","Remote"])
-        self._usb_tab  = PermTab("🔌", "USB Devices",  "Currently connected USB devices",
-                                  get_usb_devices,  ["Bus","Device","ID","Description"])
+        self._net_tab  = _NetworkTab()
+        self._usb_tab  = _USBTab()
         self._port_tab = PermTab("🔒", "Open Ports",   "Listening ports on this machine",
                                   get_open_ports,   ["Proto","Address","Process","PID"])
         self._proc_tab = _ProcessTab()
+        self._fw_tab   = _FirewallTab()
         self._perm_tab = _PermissionsTab(self.db)
         self._sett_tab = _SettingsTab(self.db)
 
@@ -171,6 +174,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._usb_tab,  "🔌  USB")
         self._tabs.addTab(self._port_tab, "🔒  Ports")
         self._tabs.addTab(self._proc_tab, "⚙️  Processes")
+        self._tabs.addTab(self._fw_tab,   "🔥  Firewall")
         self._tabs.addTab(self._perm_tab, "🔑  Permissions")
         self._tabs.addTab(self._sett_tab, "⚙  Settings")
 
@@ -213,7 +217,7 @@ class MainWindow(QMainWindow):
         idx = self._tabs.currentIndex()
         live = [None, self._cam_tab, self._mic_tab, self._scr_tab,
                 self._net_tab, self._usb_tab, self._port_tab,
-                self._proc_tab, self._perm_tab, self._sett_tab]
+                self._proc_tab, self._fw_tab, self._perm_tab, self._sett_tab]
         if 0 < idx < len(live) and live[idx]:
             live[idx].refresh()
 
@@ -586,3 +590,301 @@ class _SettingsTab(QWidget):
         except Exception:
             QMessageBox.information(self, "Flatseal",
                 "Install with:\n\nflatpak install flathub com.github.tchx84.Flatseal")
+
+
+# ── Network Tab (with Block button) ──────────────────────────────────────────
+
+class _NetworkTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        hdr = QHBoxLayout()
+        ico = QLabel("🌐"); ico.setFont(QFont("Noto Color Emoji", 18))
+        ttl = QLabel("Network")
+        ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
+        ttl.setStyleSheet(f"color:{C['accent']};")
+        sub = QLabel("Active connections — cut network access per app")
+        sub.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
+        left = QVBoxLayout(); left.setSpacing(2)
+        left.addWidget(ttl); left.addWidget(sub)
+        hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+        layout.addLayout(hdr)
+        layout.addWidget(hsep())
+
+        self._body = QVBoxLayout()
+        layout.addLayout(self._body)
+
+        foot = QHBoxLayout()
+        foot.addStretch()
+        r_btn = QPushButton("⟳  Refresh"); r_btn.setObjectName("flat")
+        r_btn.clicked.connect(self.refresh)
+        foot.addWidget(r_btn)
+        layout.addLayout(foot)
+        self.refresh()
+
+    def refresh(self):
+        rows = get_network_conns()
+        while self._body.count():
+            c = self._body.takeAt(0)
+            if c.widget(): c.widget().deleteLater()
+
+        if not rows:
+            lbl = QLabel("  No active connections")
+            lbl.setStyleSheet(f"color:{C['muted']}; padding:24px;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._body.addWidget(lbl)
+            return
+
+        headers = ["PID", "Process", "State", "Local", "Remote", "Action"]
+        tbl = QTableWidget(len(rows), len(headers))
+        tbl.setHorizontalHeaderLabels(headers)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        tbl.setAlternatingRowColors(True)
+        hdr = tbl.horizontalHeader()
+        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
+        tbl.setColumnWidth(len(headers)-1, 120)
+
+        for r, row in enumerate(rows):
+            for c, val in enumerate(row):
+                tbl.setItem(r, c, QTableWidgetItem(str(val)))
+            pid  = str(row[0])
+            name = str(row[1])
+            blocked = is_blocked(name)
+            btn = QPushButton("Unblock" if blocked else "Block Net")
+            btn.setObjectName("success" if blocked else "danger")
+            btn.setFixedWidth(110)
+            btn.clicked.connect(lambda _, p=pid, n=name, b=blocked: self._toggle(p, n, b))
+            tbl.setCellWidget(r, len(headers)-1, btn)
+
+        self._body.addWidget(tbl)
+
+    def _toggle(self, pid, name, currently_blocked):
+        if currently_blocked:
+            ok, err = unblock_app(name)
+            if not ok:
+                QMessageBox.warning(self, "Error", f"Could not unblock:\n{err}")
+        else:
+            ok, err = block_app(pid, name)
+            if not ok:
+                QMessageBox.warning(self, "Error",
+                    f"Could not block network:\n{err}\n\n"
+                    "Tip: iptables requires root. Make sure pkexec is available.")
+        self.refresh()
+
+
+# ── USB Tab (with Enable/Disable toggle) ─────────────────────────────────────
+
+class _USBTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        hdr = QHBoxLayout()
+        ico = QLabel("🔌"); ico.setFont(QFont("Noto Color Emoji", 18))
+        ttl = QLabel("USB Devices")
+        ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
+        ttl.setStyleSheet(f"color:{C['accent']};")
+        sub = QLabel("Enable or disable connected USB devices")
+        sub.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
+        left = QVBoxLayout(); left.setSpacing(2)
+        left.addWidget(ttl); left.addWidget(sub)
+        hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+
+        lockdown_btn = QPushButton("⚠  Disable All USB")
+        lockdown_btn.setObjectName("danger")
+        lockdown_btn.setFixedWidth(160)
+        lockdown_btn.clicked.connect(self._lockdown)
+        hdr.addWidget(lockdown_btn)
+        layout.addLayout(hdr)
+        layout.addWidget(hsep())
+
+        self._body = QVBoxLayout()
+        layout.addLayout(self._body)
+
+        foot = QHBoxLayout()
+        foot.addStretch()
+        r_btn = QPushButton("⟳  Refresh"); r_btn.setObjectName("flat")
+        r_btn.clicked.connect(self.refresh)
+        foot.addWidget(r_btn)
+        layout.addLayout(foot)
+        self.refresh()
+
+    def refresh(self):
+        ports = get_usb_ports()
+        while self._body.count():
+            c = self._body.takeAt(0)
+            if c.widget(): c.widget().deleteLater()
+
+        if not ports:
+            lbl = QLabel("  No USB devices found")
+            lbl.setStyleSheet(f"color:{C['muted']}; padding:24px;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._body.addWidget(lbl)
+            return
+
+        headers = ["ID", "Vendor:Product", "Device", "Speed", "Status", "Action"]
+        tbl = QTableWidget(len(ports), len(headers))
+        tbl.setHorizontalHeaderLabels(headers)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        tbl.setAlternatingRowColors(True)
+        hdr = tbl.horizontalHeader()
+        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
+        tbl.setColumnWidth(len(headers)-1, 110)
+
+        for r, p in enumerate(ports):
+            authorized = p["authorized"]
+            vals = [p["id"], f"{p['vendor_id']}:{p['product_id']}",
+                    p["product"], p["speed"],
+                    "✓ Enabled" if authorized else "✗ Disabled"]
+            for c, val in enumerate(vals):
+                item = QTableWidgetItem(val)
+                if not authorized:
+                    item.setForeground(QColor(C["danger"]))
+                tbl.setItem(r, c, item)
+
+            btn = QPushButton("Enable" if not authorized else "Disable")
+            btn.setObjectName("success" if not authorized else "danger")
+            btn.setFixedWidth(100)
+            dev_id = p["id"]
+            btn.clicked.connect(lambda _, d=dev_id, a=authorized: self._toggle(d, a))
+            tbl.setCellWidget(r, len(headers)-1, btn)
+
+        self._body.addWidget(tbl)
+
+    def _toggle(self, device_id: str, currently_authorized: bool):
+        action = "disable" if currently_authorized else "enable"
+        reply = QMessageBox.question(self, f"{action.title()} USB Device",
+            f"Are you sure you want to {action} device {device_id}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        ok, err = set_authorized(device_id, not currently_authorized)
+        if not ok:
+            QMessageBox.warning(self, "Error", f"Could not {action} device:\n{err}")
+        self.refresh()
+
+    def _lockdown(self):
+        reply = QMessageBox.question(self, "USB Lockdown",
+            "Disable ALL connected USB devices?\n\nThis will cut off mice, keyboards, and drives.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        ok, err = disable_all_usb()
+        if not ok:
+            QMessageBox.warning(self, "Error", f"Some devices could not be disabled:\n{err}")
+        self.refresh()
+
+
+# ── Firewall Tab ──────────────────────────────────────────────────────────────
+
+class _FirewallTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        hdr = QHBoxLayout()
+        ico = QLabel("🔥"); ico.setFont(QFont("Noto Color Emoji", 18))
+        ttl = QLabel("Firewall Rules")
+        ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
+        ttl.setStyleSheet(f"color:{C['accent']};")
+        sub = QLabel("Apps with network access blocked by PermGuard")
+        sub.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
+        left = QVBoxLayout(); left.setSpacing(2)
+        left.addWidget(ttl); left.addWidget(sub)
+        hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+
+        clr_btn = QPushButton("Clear All Rules")
+        clr_btn.setObjectName("danger")
+        clr_btn.setFixedWidth(140)
+        clr_btn.clicked.connect(self._clear_all)
+        hdr.addWidget(clr_btn)
+        layout.addLayout(hdr)
+
+        # iptables availability warning
+        if not iptables_available():
+            warn = QLabel("⚠  iptables not available or insufficient permissions. "
+                          "Network blocking requires pkexec + iptables.")
+            warn.setStyleSheet(
+                f"background:{C['warning']}22; color:{C['warning']};"
+                f"border:1px solid {C['warning']}44; border-radius:6px; padding:8px;")
+            warn.setWordWrap(True)
+            layout.addWidget(warn)
+
+        layout.addWidget(hsep())
+
+        self._body = QVBoxLayout()
+        layout.addLayout(self._body)
+
+        foot = QHBoxLayout()
+        foot.addStretch()
+        r_btn = QPushButton("⟳  Refresh"); r_btn.setObjectName("flat")
+        r_btn.clicked.connect(self.refresh)
+        foot.addWidget(r_btn)
+        layout.addLayout(foot)
+        self.refresh()
+
+    def refresh(self):
+        rules = get_blocked_apps()
+        while self._body.count():
+            c = self._body.takeAt(0)
+            if c.widget(): c.widget().deleteLater()
+
+        if not rules:
+            lbl = QLabel("  No active firewall rules.\n"
+                         "  Use the Network tab to block an app.")
+            lbl.setStyleSheet(f"color:{C['muted']}; padding:24px;")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._body.addWidget(lbl)
+            return
+
+        tbl = QTableWidget(len(rules), 4)
+        tbl.setHorizontalHeaderLabels(["App", "UID", "Last PID", "Action"])
+        tbl.verticalHeader().setVisible(False)
+        tbl.setAlternatingRowColors(True)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        hdr = tbl.horizontalHeader()
+        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        tbl.setColumnWidth(3, 100)
+
+        for r, rule in enumerate(rules):
+            tbl.setItem(r, 0, QTableWidgetItem(rule["name"]))
+            tbl.setItem(r, 1, QTableWidgetItem(str(rule.get("uid", "?"))))
+            tbl.setItem(r, 2, QTableWidgetItem(str(rule.get("pid", "?"))))
+            btn = QPushButton("Unblock")
+            btn.setObjectName("success")
+            btn.setFixedWidth(90)
+            name = rule["name"]
+            btn.clicked.connect(lambda _, n=name: self._unblock(n))
+            tbl.setCellWidget(r, 3, btn)
+
+        self._body.addWidget(tbl)
+
+    def _unblock(self, name: str):
+        ok, err = unblock_app(name)
+        if not ok:
+            QMessageBox.warning(self, "Error", f"Could not unblock:\n{err}")
+        self.refresh()
+
+    def _clear_all(self):
+        reply = QMessageBox.question(self, "Clear All Rules",
+            "Remove all network blocks?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            ok, err = clear_all_blocks()
+            if not ok:
+                QMessageBox.warning(self, "Error", f"Some rules could not be removed:\n{err}")
+            self.refresh()

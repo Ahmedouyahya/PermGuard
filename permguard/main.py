@@ -34,6 +34,11 @@ def main():
     pulse.timeout.connect(lambda: None)
 
     db  = PermissionDB()
+
+    # Re-apply any firewall rules saved from the previous session
+    from .core.firewall import restore_rules_on_startup
+    restore_rules_on_startup()
+
     win = MainWindow(db)
 
     # Start background monitors
