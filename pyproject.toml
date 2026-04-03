@@ -23,8 +23,8 @@ classifiers = [
 permguard = "permguard.main:main"
 
 [project.urls]
-Homepage   = "https://github.com/YOUR_USERNAME/PermGuard"
-Issues     = "https://github.com/YOUR_USERNAME/PermGuard/issues"
+Homepage   = "https://github.com/Ahmedouyahya/PermGuard"
+Issues     = "https://github.com/Ahmedouyahya/PermGuard/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

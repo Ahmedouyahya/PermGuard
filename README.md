@@ -2,51 +2,151 @@
 
 **Android-like privacy & permission manager for Linux/KDE**
 
-PermGuard monitors your system in real-time and intercepts camera and microphone access attempts — just like Android does. When an app tries to use your camera or mic, a popup appears asking you to **Allow**, **Allow this time**, or **Deny**. Decisions can be saved permanently per app.
+PermGuard watches your system in real-time. The moment an app tries to use your **camera** or **microphone**, a popup appears — just like on Android — asking you what to do. You choose, PermGuard remembers. Every app, every resource, under your control.
+
+---
+
+## How it works
+
+### The permission flow
+
+```
+App opens /dev/video0          App starts capturing mic
+         │                              │
+         ▼                              ▼
+  CameraMonitor thread          MicMonitor thread
+  polls fuser every 1s          polls pactl every 1s
+         │                              │
+         └──────────────┬───────────────┘
+                        ▼
+              New PID detected?
+                        │
+         ┌──────────────┼───────────────┐
+         ▼              ▼               ▼
+   Rule = ALLOW    Rule = DENY     No rule yet
+   (let it run)   (kill it now)        │
+                                       ▼
+                              Show permission dialog
+                              ┌─────────────────────┐
+                              │  Firefox             │
+                              │  wants your camera   │
+                              │                      │
+                              │ [Deny][Once][Allow]  │
+                              └─────────────────────┘
+                                        │
+                  ┌─────────────────────┼──────────────────────┐
+                  ▼                     ▼                       ▼
+               Deny                 Once                    Allow
+          Kill process         Let it run             Let it run
+          Save rule?           Don't save             Save rule?
+          (if checked)                                (if checked)
+```
+
+### Where data lives
+
+| Path | What's stored |
+|---|---|
+| `~/.local/share/permguard/permissions.json` | Per-app permission rules |
+| `~/.local/share/permguard/events.log` | Full audit log of every access and decision |
+| `~/.config/autostart/permguard.desktop` | Auto-start entry (optional) |
+
+### Architecture
+
+```
+permguard/
+├── main.py                    ← Starts app, wires monitors to UI
+│
+├── core/
+│   ├── monitor.py             ← Two QThreads running in background
+│   │     CameraMonitor        ← polls fuser /dev/video* every second
+│   │     MicMonitor           ← polls pactl list source-outputs every second
+│   │
+│   ├── permissions.py         ← JSON rule database (allow/deny/ask per app+resource)
+│   ├── data.py                ← System queries (camera, mic, net, USB, ports, procs)
+│   └── system.py              ← Low-level ops (kill PID, block device, proc info)
+│
+└── ui/
+    ├── permission_dialog.py   ← The Android-style popup (PyQt6 QDialog)
+    ├── main_window.py         ← Main window + all 9 tabs
+    ├── widgets.py             ← Shared table/card components
+    └── styles.py              ← Dark theme (Nord palette)
+```
+
+### The permission dialog
+
+When an unknown app accesses a resource, PermGuard shows this floating dialog (always on top, appears near the top of the screen like Android):
+
+```
+╔══════════════════════════════════════╗
+║  📷  Camera Access Request           ║
+║                                      ║
+║  Firefox                             ║
+║  wants to access your camera         ║
+║  /usr/lib/firefox/firefox            ║
+║  PID 12345                           ║
+║                                      ║
+║  ☑ Remember my choice for this app  ║
+║                                      ║
+║  [Deny]  [Allow this time]  [Allow]  ║
+╚══════════════════════════════════════╝
+       Auto-deny in 30s if no response
+```
+
+- **Allow** — lets the app use the resource, saves rule if "Remember" is checked
+- **Allow this time** — lets it through once, never saves, asks again next time
+- **Deny** — kills the process / cuts the mic stream, saves rule if "Remember" is checked
+- **Auto-deny** — if you don't respond in 30 seconds, access is automatically denied
+
+### How blocking works
+
+| Resource | Detection method | How access is revoked |
+|---|---|---|
+| Camera | `fuser /dev/video*` or `lsof` | `kill -15 <PID>` (SIGTERM) |
+| Microphone | `pactl list source-outputs` | `pactl kill-source-output <index>` |
+| Camera (global block) | — | `chmod 000 /dev/video*` via pkexec |
+| Mic (global block) | — | `pactl suspend-source <index>` |
+
+> **Note:** Detection happens within ~1 second of access starting. This is the practical limit on Linux without kernel-level hooks (eBPF/fanotify). Future versions will explore pre-emptive blocking.
 
 ---
 
 ## Features
 
-- **Real-time permission dialogs** — popup appears the moment an app accesses your camera or mic
-- **Allow / Allow this time / Deny** — same three options as Android, with a "remember" toggle
-- **Saved rules** — manage all per-app decisions from the Permissions tab
-- **Auto-deny countdown** — if you don't respond in 30 seconds, access is denied automatically
-- **Dashboard** — at-a-glance overview of all active accesses
-- **Block toggles** — instantly block camera or microphone system-wide with one click
-- **Network monitor** — see all active connections per process
-- **USB devices** — view connected USB hardware
-- **Open ports** — see which processes are listening on which ports
-- **Process manager** — view top processes by CPU, with kill button
-- **Event log** — full audit trail of all access and decisions
-- **Auto-start** — optional start at login via KDE autostart
-- **System tray** — stays in background, always monitoring
-
----
-
-## Screenshots
-
-> _Add screenshots here_
+| Tab | What it shows |
+|---|---|
+| 🏠 Dashboard | Live cards for all 6 categories + one-click camera/mic block |
+| 📷 Camera | Apps currently capturing from webcam, kill button |
+| 🎤 Mic | Apps capturing audio via PipeWire/PulseAudio, kill button |
+| 🖥 Screen Share | Active screen recording/share sessions |
+| 🌐 Network | All active TCP/UDP connections per process |
+| 🔌 USB | Connected USB devices (bus, ID, name) |
+| 🔒 Ports | Listening ports and which process owns each |
+| ⚙️ Processes | Top 15 by CPU usage, kill button |
+| 🔑 Permissions | All saved rules — revoke individual or reset all |
+| ⚙ Settings | Auto-start, refresh interval, notifications, event log |
 
 ---
 
 ## Installation
 
-### One command (recommended)
+### One command
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/PermGuard.git && cd PermGuard && bash install.sh
+git clone https://github.com/Ahmedouyahya/PermGuard.git && cd PermGuard && bash install.sh
 ```
 
-That's it. The installer handles everything:
-- Installs system dependencies (`apt`)
-- Installs the Python package (`pip`)
-- Creates the `permguard` command in your PATH
-- Adds PermGuard to your app menu
+The installer:
+1. Checks Python 3.10+
+2. Installs missing system packages via `apt` (PyQt6, fuser, pactl, lsusb, etc.)
+3. Copies app files to `~/.local/share/permguard/`
+4. Creates the `permguard` command at `~/.local/bin/permguard`
+5. Adds app menu entry (searchable as "PermGuard")
 
-Then run it:
+### Run
+
 ```bash
-permguard
+permguard          # terminal
+# or search "PermGuard" in your app menu
 ```
 
 ### Uninstall
@@ -59,110 +159,47 @@ bash install.sh --uninstall
 
 ## Requirements
 
-The installer handles these automatically.
+Handled automatically by the installer.
 
-| Dependency | Purpose |
+| Dependency | Used for |
 |---|---|
 | Python 3.10+ | Runtime |
-| PyQt6 | GUI framework |
-| PipeWire / PulseAudio | Microphone monitoring (`pactl`) |
-| `fuser` / `lsof` | Camera device detection |
-| `ss` | Network connection info |
-| `lsusb` | USB device listing |
-| `pkexec` | Privileged device blocking |
+| PyQt6 | GUI |
+| `pactl` (pulseaudio-utils) | Microphone monitoring and control |
+| `fuser` (psmisc) | Camera device detection |
+| `lsof` | Camera detection fallback |
+| `ss` (iproute2) | Network connections and open ports |
+| `lsusb` (usbutils) | USB device listing |
+| `notify-send` (libnotify-bin) | Desktop notifications |
+| `pkexec` | Elevated camera blocking (optional) |
 
----
-
-## How it works
-
-PermGuard runs two background threads:
-
-1. **CameraMonitor** — polls `/dev/video*` every second using `fuser`/`lsof` for new PIDs
-2. **MicMonitor** — polls `pactl list source-outputs` every second for new audio capture streams
-
-When a new PID is detected:
-1. The app name is looked up via `/proc/<pid>/comm`
-2. The permission database is checked for a saved rule
-3. If **allow** → let it through silently
-4. If **deny** → immediately terminate the stream / kill the process
-5. If **unknown** → show the Android-style dialog
-
-> **Note:** Detection happens within ~1 second of access starting. This is the practical limit without kernel-level hooks (eBPF/fanotify). Future versions may add deeper integration.
-
----
-
-## Permission storage
-
-Rules are saved to `~/.local/share/permguard/permissions.json`:
-
-```json
-{
-  "firefox": {
-    "camera": "allow",
-    "microphone": "deny"
-  },
-  "obs": {
-    "camera": "allow",
-    "microphone": "allow"
-  }
-}
-```
-
----
-
-## Project structure
-
-```
-permguard/
-├── run.py                      ← entry point
-├── requirements.txt
-├── install.sh
-├── permguard/
-│   ├── main.py                 ← app bootstrap, monitors wired here
-│   ├── core/
-│   │   ├── monitor.py          ← CameraMonitor, MicMonitor (QThread)
-│   │   ├── permissions.py      ← permission DB (JSON)
-│   │   ├── data.py             ← system data sources
-│   │   └── system.py           ← low-level helpers (kill, block, proc info)
-│   └── ui/
-│       ├── main_window.py      ← main QMainWindow + all tabs
-│       ├── permission_dialog.py ← Android-style popup
-│       ├── widgets.py          ← reusable components
-│       └── styles.py           ← colors and Qt stylesheets
-└── assets/
-    └── icon.svg
-```
-
----
-
-## Roadmap
-
-- [ ] eBPF-based pre-emptive blocking (block before first frame is captured)
-- [ ] Per-app network firewall (allow/deny internet access per process)
-- [ ] Clipboard access monitoring
-- [ ] Flatpak permission management integration
-- [ ] Dark/light theme toggle
-- [ ] Notification history viewer
+**Tested on:** Parrot OS 7.1 (KDE Plasma 6.3, Wayland)
+**Should work on:** Any Debian/Ubuntu-based distro with KDE or GNOME
 
 ---
 
 ## Contributing
 
-Pull requests welcome. Please open an issue first to discuss major changes.
-
 1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/my-feature`)
+2. Create a branch: `git checkout -b feature/my-feature`
 3. Commit your changes
 4. Open a Pull Request
+
+Bug reports and feature requests welcome via [GitHub Issues](https://github.com/Ahmedouyahya/PermGuard/issues).
+
+---
+
+## Roadmap
+
+- [ ] eBPF pre-emptive blocking (intercept before first frame)
+- [ ] Per-app network firewall (allow/block internet per process)
+- [ ] Clipboard access monitoring
+- [ ] Flatpak sandbox integration
+- [ ] GNOME / GTK theme support
+- [ ] Notification history viewer
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE)
-
----
-
-## Author
-
-Built for Parrot OS / KDE Plasma 6, works on any Linux with PipeWire/PulseAudio.
+MIT — see [LICENSE](LICENSE)
