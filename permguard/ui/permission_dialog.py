@@ -33,6 +33,18 @@ RESOURCE_META = {
         "desc":  "capture your screen",
         "color": C["purple"],
     },
+    "filesystem": {
+        "icon":  "📂",
+        "label": "File Access",
+        "desc":  "read files in a protected directory",
+        "color": C["warning"],
+    },
+    "package_install": {
+        "icon":  "📦",
+        "label": "Software Install",
+        "desc":  "install or modify software on your system",
+        "color": C["danger"],
+    },
 }
 
 # Decision constants
@@ -152,7 +164,10 @@ class PermissionDialog(QDialog):
         app_lbl.setStyleSheet(f"color: {C['text']}; background: transparent;")
         layout.addWidget(app_lbl)
 
-        desc = QLabel(f"wants to {meta['desc']}")
+        desc_text = f"wants to {meta['desc']}"
+        if self.resource == "filesystem" and self.stream_index:
+            desc_text += f":\n{self.stream_index}"
+        desc = QLabel(desc_text)
         desc.setStyleSheet(f"color: {C['muted']}; font-size: 13px; background: transparent;")
         desc.setWordWrap(True)
         layout.addWidget(desc)

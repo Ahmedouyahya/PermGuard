@@ -1,15 +1,39 @@
 """
-monitor.py — Background monitors that detect new camera/mic access.
+monitor.py — Background monitors that detect new resource access.
 
-CameraMonitor  — inotify-based, event-driven (zero CPU when idle).
-                 Uses IN_OPEN on /dev/video* to wake up instantly,
-                 then scans /proc/pid/fd to identify which process.
-
-MicMonitor     — polls pactl every 1s (4.8ms, acceptable).
+CameraMonitor        — inotify-based, event-driven (zero CPU when idle).
+MicMonitor           — polls pactl every 1s.
+FileMonitor          — inotify on user-configured sensitive directories.
+PackageInstallMonitor— polls /proc every 2s for package manager processes.
 """
 import os, re, time, ctypes, ctypes.util, struct, select
+from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 from .data import get_camera_pids, get_mic_streams
+
+# Package managers to watch for
+PACKAGE_MANAGERS = {
+    "apt", "apt-get", "apt-cache", "dpkg", "dpkg-deb",
+    "pip", "pip3", "pip2",
+    "npm", "yarn", "pnpm",
+    "snap", "flatpak",
+    "pacman", "yay", "paru",
+    "dnf", "yum", "rpm",
+    "zypper",
+    "cargo",
+    "gem",
+    "go",
+    "brew",
+    "conda", "mamba",
+    "pipx",
+}
+
+# Sensitive paths protected by default
+DEFAULT_SENSITIVE = [
+    str(Path.home() / ".ssh"),
+    str(Path.home() / ".gnupg"),
+    str(Path.home() / ".config" / "permguard"),
+]
 
 
 class AccessEvent:
@@ -156,7 +180,7 @@ class CameraMonitor(QThread):
         self.wait(2000)
 
 
-# ── Mic monitor (pactl polling — 4.8ms, kept) ────────────────────────────────
+# ── Mic monitor (pactl polling — 4.8ms, kept) ─────────────────────────────────
 
 class MicMonitor(QThread):
     """
@@ -191,6 +215,180 @@ class MicMonitor(QThread):
                 for pid in list(self._known):
                     if pid not in current:
                         self.access_gone.emit(pid)
+                self._known = current
+            except Exception:
+                pass
+            time.sleep(self.INTERVAL)
+
+    def stop(self):
+        self._running = False
+        self.wait(2000)
+
+
+# ── File access monitor (inotify on sensitive dirs) ───────────────────────────
+
+class FileMonitor(QThread):
+    """
+    Watches user-configured sensitive directories with inotify IN_OPEN.
+    When an unknown process opens a file inside, emits new_access.
+    The caller SIGSTOPs the process before showing the dialog.
+    """
+    new_access  = pyqtSignal(object)
+    access_gone = pyqtSignal(str)
+
+    def __init__(self, protected_paths=None, parent=None):
+        super().__init__(parent)
+        self._running = False
+        self._known: set[str] = set()
+        self._paths: list[str] = list(protected_paths) if protected_paths \
+                                 else list(DEFAULT_SENSITIVE)
+
+    def set_paths(self, paths: list[str]):
+        self._paths = paths
+
+    def run(self):
+        from .system import proc_name, proc_cmdline
+        self._running = True
+
+        try:
+            inotify = _Inotify()
+        except Exception:
+            self._run_fallback()
+            return
+
+        for p in self._paths:
+            if os.path.isdir(p):
+                inotify.watch(p, _Inotify.IN_OPEN | _Inotify.IN_CREATE)
+
+        while self._running:
+            events = inotify.read_events(timeout=1.0)
+            if events:
+                current = self._scan_accesses()
+                for pid in current - self._known:
+                    path = self._get_accessed_path(pid)
+                    self.new_access.emit(AccessEvent(
+                        pid=pid,
+                        app_name=proc_name(pid),
+                        cmdline=proc_cmdline(pid),
+                        resource="filesystem",
+                        stream_index=path,
+                    ))
+                for pid in self._known - current:
+                    self.access_gone.emit(pid)
+                self._known = current
+
+        inotify.close()
+
+    def _run_fallback(self):
+        from .system import proc_name, proc_cmdline
+        while self._running:
+            try:
+                current = self._scan_accesses()
+                for pid in current - self._known:
+                    path = self._get_accessed_path(pid)
+                    self.new_access.emit(AccessEvent(
+                        pid=pid,
+                        app_name=proc_name(pid),
+                        cmdline=proc_cmdline(pid),
+                        resource="filesystem",
+                        stream_index=path,
+                    ))
+                for pid in self._known - current:
+                    self.access_gone.emit(pid)
+                self._known = current
+            except Exception:
+                pass
+            time.sleep(2.0)
+
+    def _scan_accesses(self) -> set[str]:
+        pids: set[str] = set()
+        protected = [p for p in self._paths if p]
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            fd_dir = f"/proc/{pid}/fd"
+            try:
+                for fd in os.listdir(fd_dir):
+                    try:
+                        lnk = os.readlink(f"{fd_dir}/{fd}")
+                        for ppath in protected:
+                            if lnk.startswith(ppath):
+                                pids.add(pid)
+                                break
+                    except OSError:
+                        pass
+            except OSError:
+                pass
+        return pids
+
+    def _get_accessed_path(self, pid: str) -> str:
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            for fd in os.listdir(fd_dir):
+                try:
+                    lnk = os.readlink(f"{fd_dir}/{fd}")
+                    for ppath in self._paths:
+                        if lnk.startswith(ppath):
+                            return ppath
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        return "protected directory"
+
+    def stop(self):
+        self._running = False
+        self.wait(2000)
+
+
+# ── Package install monitor ───────────────────────────────────────────────────
+
+class PackageInstallMonitor(QThread):
+    """
+    Polls /proc every 2s for processes matching known package manager names.
+    Emits new_access so the user can allow or deny before install completes.
+    """
+    new_access  = pyqtSignal(object)
+    access_gone = pyqtSignal(str)
+
+    INTERVAL = 2.0
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._running = False
+        self._known: set[str] = set()
+
+    def run(self):
+        from .system import proc_cmdline
+        self._running = True
+        while self._running:
+            try:
+                current: set[str] = set()
+                for pid in os.listdir("/proc"):
+                    if not pid.isdigit():
+                        continue
+                    try:
+                        comm = Path(f"/proc/{pid}/comm").read_text().strip()
+                        if comm in PACKAGE_MANAGERS:
+                            current.add(pid)
+                    except OSError:
+                        pass
+
+                for pid in current - self._known:
+                    try:
+                        comm    = Path(f"/proc/{pid}/comm").read_text().strip()
+                        cmdline = proc_cmdline(pid)
+                        self.new_access.emit(AccessEvent(
+                            pid=pid,
+                            app_name=comm,
+                            cmdline=cmdline,
+                            resource="package_install",
+                        ))
+                    except OSError:
+                        pass
+
+                for pid in self._known - current:
+                    self.access_gone.emit(pid)
                 self._known = current
             except Exception:
                 pass

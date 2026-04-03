@@ -10,7 +10,7 @@ from PyQt6.QtGui     import QIcon
 
 from . import __version__
 from .core.permissions import PermissionDB
-from .core.monitor     import CameraMonitor, MicMonitor
+from .core.monitor     import CameraMonitor, MicMonitor, FileMonitor, PackageInstallMonitor
 from .ui.main_window   import MainWindow
 
 # Icon lives one level above the package: <install_dir>/assets/icon.svg
@@ -67,12 +67,22 @@ def main():
     # Start background monitors
     cam_mon = CameraMonitor()
     mic_mon = MicMonitor()
+    pkg_mon = PackageInstallMonitor()
+
+    # File monitor loads its protected paths from the saved db state
+    saved_paths = db._db.get("__protected_paths__", {}).get("paths", None)
+    file_mon = FileMonitor(protected_paths=saved_paths)
+    win._file_mon = file_mon   # allow Settings tab to update paths at runtime
 
     cam_mon.new_access.connect(win.handle_access)
     mic_mon.new_access.connect(win.handle_access)
+    file_mon.new_access.connect(win.handle_access)
+    pkg_mon.new_access.connect(win.handle_access)
 
     cam_mon.start()
     mic_mon.start()
+    file_mon.start()
+    pkg_mon.start()
 
     win.show()
     db.log(f"PermGuard {__version__} started")
@@ -80,6 +90,8 @@ def main():
     ret = app.exec()
     cam_mon.stop()
     mic_mon.stop()
+    file_mon.stop()
+    pkg_mon.stop()
     sys.exit(ret)
 
 

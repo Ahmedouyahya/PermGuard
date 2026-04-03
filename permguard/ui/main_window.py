@@ -27,6 +27,7 @@ from ..core.firewall   import (block_app, unblock_app, is_blocked,
                                 get_blocked_apps, clear_all_blocks,
                                 iptables_available, restore_rules_on_startup)
 from ..core.usb_control import get_usb_ports, set_authorized, disable_all_usb
+from ..core.monitor    import DEFAULT_SENSITIVE, PACKAGE_MANAGERS
 
 AUTOSTART_DIR  = Path.home() / ".config/autostart"
 AUTOSTART_FILE = AUTOSTART_DIR / "permguard.desktop"
@@ -41,6 +42,7 @@ class MainWindow(QMainWindow):
         self._prev_cam     = set()
         self._prev_mic     = set()
         self._app_icon     = app_icon or QIcon()
+        self._file_mon     = None   # set by main() after construction
 
         self.setWindowTitle("PermGuard — Privacy Manager")
         self.setWindowIcon(self._app_icon)
@@ -206,6 +208,7 @@ class MainWindow(QMainWindow):
                                   get_open_ports,   ["Proto","Address","Process","PID"])
         self._proc_tab = _ProcessTab()
         self._fw_tab   = _FirewallTab()
+        self._file_tab = _FileAccessTab(self.db)
         self._perm_tab = _PermissionsTab(self.db)
         self._sett_tab = _SettingsTab(self.db)
 
@@ -218,12 +221,14 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._port_tab, "🔒  Ports")
         self._tabs.addTab(self._proc_tab, "⚙️  Processes")
         self._tabs.addTab(self._fw_tab,   "🔥  Firewall")
+        self._tabs.addTab(self._file_tab, "📂  Files")
         self._tabs.addTab(self._perm_tab, "🔑  Permissions")
         self._tabs.addTab(self._sett_tab, "⚙  Settings")
 
         self._dash.switch_tab.connect(self._tabs.setCurrentIndex)
         self._sett_tab.interval_changed.connect(
             lambda s: self._timer.setInterval(s * 1000))
+        self._sett_tab.protected_paths_changed.connect(self._on_paths_changed)
 
         root.addWidget(self._tabs)
 
@@ -281,6 +286,11 @@ class MainWindow(QMainWindow):
                 QSystemTrayIcon.MessageIcon.Information, 3000)
         else:
             self.showMinimized()
+
+    def _on_paths_changed(self, paths: list):
+        """Relay updated protected path list to the file monitor."""
+        if self._file_mon is not None:
+            self._file_mon.set_paths(paths)
 
     def _quit(self):
         self.db.log("PermGuard closed by user")
@@ -630,7 +640,8 @@ class _ProcessTab(QWidget):
 # ── Settings Tab ──────────────────────────────────────────────────────────────
 
 class _SettingsTab(QWidget):
-    interval_changed = pyqtSignal(int)
+    interval_changed       = pyqtSignal(int)
+    protected_paths_changed = pyqtSignal(list)
 
     def __init__(self, db: PermissionDB):
         super().__init__()
@@ -1032,3 +1043,149 @@ class _FirewallTab(QWidget):
             if not ok:
                 QMessageBox.warning(self, "Error", f"Some rules could not be removed:\n{err}")
             self.refresh()
+
+
+# ── File Access Tab ───────────────────────────────────────────────────────────
+
+class _FileAccessTab(QWidget):
+    """
+    Shows protected directories and lets the user add/remove paths.
+    Also displays recent file-access events from the log.
+    """
+    def __init__(self, db: PermissionDB):
+        super().__init__()
+        self.db = db
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
+
+        # Header
+        hdr = QHBoxLayout()
+        hdr.setSpacing(14)
+        ico = QLabel("📂"); ico.setFont(QFont("Noto Color Emoji", 20)); ico.setFixedWidth(32)
+        ttl = QLabel("File Access Control")
+        ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
+        ttl.setStyleSheet(f"color:{C['text']};")
+        sub = QLabel("Protected directories — apps need permission to read these")
+        sub.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
+        left = QVBoxLayout(); left.setSpacing(2)
+        left.addWidget(ttl); left.addWidget(sub)
+        hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+        layout.addLayout(hdr)
+        layout.addWidget(hsep())
+
+        # Protected paths list
+        paths_title = QLabel("Protected Paths")
+        paths_title.setFont(QFont("Inter", 12, QFont.Weight.Bold))
+        paths_title.setStyleSheet(f"color:{C['text']};")
+        layout.addWidget(paths_title)
+
+        self._paths_body = QVBoxLayout()
+        self._paths_body.setSpacing(6)
+        layout.addLayout(self._paths_body)
+
+        add_row = QHBoxLayout()
+        self._path_input = QLineEdit()
+        self._path_input.setPlaceholderText("Add path, e.g. /home/user/Documents")
+        self._path_input.setStyleSheet(
+            f"background:{C['surface']}; color:{C['text']}; border:1px solid {C['border']};"
+            f"border-radius:6px; padding:6px 10px; font-size:13px;")
+        add_btn = QPushButton("+ Add")
+        add_btn.setObjectName("success")
+        add_btn.setFixedWidth(80)
+        add_btn.clicked.connect(self._add_path)
+        self._path_input.returnPressed.connect(self._add_path)
+        add_row.addWidget(self._path_input)
+        add_row.addWidget(add_btn)
+        layout.addLayout(add_row)
+
+        layout.addWidget(hsep())
+
+        # Recent events from log
+        log_title = QLabel("Recent File-Access Events")
+        log_title.setFont(QFont("Inter", 12, QFont.Weight.Bold))
+        log_title.setStyleSheet(f"color:{C['text']};")
+        layout.addWidget(log_title)
+
+        self._log = QTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setStyleSheet(
+            f"background:{C['surface']}; color:{C['muted']}; border:1px solid {C['border']};"
+            f"border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px;")
+        self._log.setFixedHeight(180)
+        layout.addWidget(self._log)
+
+        foot = QHBoxLayout()
+        foot.addStretch()
+        r_btn = QPushButton("↻  Refresh"); r_btn.setObjectName("flat")
+        r_btn.clicked.connect(self.refresh)
+        foot.addWidget(r_btn)
+        layout.addLayout(foot)
+
+        self._load_paths()
+        self.refresh()
+
+    def _load_paths(self):
+        saved = self.db._db.get("__protected_paths__", {}).get("paths", DEFAULT_SENSITIVE)
+        self._paths = list(saved)
+        self._rebuild_paths_ui()
+
+    def _save_paths(self):
+        if "__protected_paths__" not in self.db._db:
+            self.db._db["__protected_paths__"] = {}
+        self.db._db["__protected_paths__"]["paths"] = self._paths
+        self.db.save()
+
+    def get_paths(self) -> list[str]:
+        return list(self._paths)
+
+    def _rebuild_paths_ui(self):
+        while self._paths_body.count():
+            c = self._paths_body.takeAt(0)
+            if c.widget(): c.widget().deleteLater()
+
+        for path in self._paths:
+            row = QHBoxLayout()
+            lbl = QLabel(path)
+            lbl.setStyleSheet(
+                f"background:{C['surface']}; color:{C['text']}; border:1px solid {C['border']};"
+                f"border-radius:6px; padding:5px 10px; font-size:12px;")
+            rm_btn = QPushButton("✕")
+            rm_btn.setObjectName("flat")
+            rm_btn.setFixedWidth(30)
+            rm_btn.setToolTip("Remove this path")
+            rm_btn.clicked.connect(lambda _, p=path: self._remove_path(p))
+            row.addWidget(lbl, 1)
+            row.addWidget(rm_btn)
+            w = QWidget(); w.setLayout(row)
+            self._paths_body.addWidget(w)
+
+        if not self._paths:
+            lbl = QLabel("No protected paths — add one below")
+            lbl.setStyleSheet(f"color:{C['muted']}; font-size:12px; padding:4px;")
+            self._paths_body.addWidget(lbl)
+
+    def _add_path(self):
+        path = self._path_input.text().strip()
+        if not path or path in self._paths:
+            return
+        # Expand ~ 
+        from pathlib import Path as _P
+        path = str(_P(path).expanduser())
+        self._paths.append(path)
+        self._save_paths()
+        self._rebuild_paths_ui()
+        self._path_input.clear()
+        # Notify monitor via parent signal (handled in main_window)
+        self.window()._on_paths_changed(self._paths)
+
+    def _remove_path(self, path: str):
+        if path in self._paths:
+            self._paths.remove(path)
+            self._save_paths()
+            self._rebuild_paths_ui()
+            self.window()._on_paths_changed(self._paths)
+
+    def refresh(self):
+        lines = [l for l in self.db.get_log(200) if "filesystem" in l or "package" in l or "File" in l or "frozen" in l.lower()]
+        self._log.setPlainText("\n".join(lines) if lines else "No file-access events yet.")
