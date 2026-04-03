@@ -20,6 +20,10 @@ fail() { echo -e "${R}[✗]${NC} $*" >&2; exit 1; }
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "--uninstall" ]]; then
     info "Removing PermGuard..."
+    systemctl --user stop    permguard.service 2>/dev/null || true
+    systemctl --user disable permguard.service 2>/dev/null || true
+    rm -f   "$HOME/.config/systemd/user/permguard.service"
+    systemctl --user daemon-reload 2>/dev/null || true
     rm -rf  "$INSTALL_DIR"
     rm -f   "$BIN_DIR/permguard"
     rm -f   "$APPS_DIR/permguard.desktop"
@@ -132,11 +136,22 @@ EOF
 update-desktop-database "$APPS_DIR" 2>/dev/null || true
 ok "App menu entry created"
 
-# ── Autostart at login (enabled by default) ───────────────────────────────────
-info "Enabling autostart at login..."
-AUTOSTART_DIR="$HOME/.config/autostart"
-mkdir -p "$AUTOSTART_DIR"
-cat > "$AUTOSTART_DIR/permguard.desktop" <<EOF
+# ── Systemd user service (auto-start + auto-restart on crash) ─────────────────
+info "Installing systemd user service..."
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+sed "s|%h|$HOME|g" "$SCRIPT_DIR/permguard.service" > "$SYSTEMD_USER_DIR/permguard.service"
+
+if systemctl --user daemon-reload 2>/dev/null; then
+    systemctl --user enable permguard.service 2>/dev/null || true
+    ok "Systemd service installed and enabled (auto-starts at login)"
+    info "Control with:  systemctl --user start|stop|restart|status permguard"
+else
+    # Fallback to .desktop autostart if systemd user session unavailable
+    warn "systemd user session not available — falling back to .desktop autostart"
+    AUTOSTART_DIR="$HOME/.config/autostart"
+    mkdir -p "$AUTOSTART_DIR"
+    cat > "$AUTOSTART_DIR/permguard.desktop" <<EOF
 [Desktop Entry]
 Name=PermGuard
 Comment=PermGuard privacy monitor
@@ -147,7 +162,8 @@ Type=Application
 X-KDE-autostart-after=panel
 X-GNOME-Autostart-enabled=true
 EOF
-ok "Autostart enabled — PermGuard will launch at every login"
+    ok "Autostart enabled via .desktop fallback"
+fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""

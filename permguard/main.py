@@ -35,9 +35,11 @@ def main():
 
     db  = PermissionDB()
 
-    # Re-apply any firewall rules saved from the previous session
+    # Re-apply persisted rules from previous session
     from .core.firewall import restore_rules_on_startup
-    restore_rules_on_startup()
+    from .core.system  import restore_device_state
+    restore_rules_on_startup()   # iptables network blocks
+    restore_device_state()       # camera chmod + mic suspend
 
     win = MainWindow(db)
 

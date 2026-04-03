@@ -1,0 +1,15 @@
+[Unit]
+Description=PermGuard Privacy Monitor
+Documentation=https://github.com/Ahmedouyahya/PermGuard
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/permguard
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical-session.target

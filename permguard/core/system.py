@@ -1,8 +1,22 @@
 """
 system.py — Low-level system helpers: process info, device control, shell.
 """
-import os, re, subprocess
+import os, re, subprocess, json
 from pathlib import Path
+
+_STATE_FILE = Path.home() / ".local/share/permguard/device_state.json"
+
+def _load_state() -> dict:
+    try:
+        return json.loads(_STATE_FILE.read_text()) if _STATE_FILE.exists() else {}
+    except Exception:
+        return {}
+
+def _save_state(key: str, value: bool):
+    _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    s = _load_state()
+    s[key] = value
+    _STATE_FILE.write_text(json.dumps(s))
 
 
 # ── Shell ─────────────────────────────────────────────────────────────────────
@@ -136,7 +150,10 @@ def set_camera_blocked(block: bool) -> tuple[bool, str]:
     if not devs:
         return False, "No video devices found"
     perm = "000" if block else "660"
-    return run_privileged(["chmod", perm] + devs)
+    ok, err = run_privileged(["chmod", perm] + devs)
+    if ok:
+        _save_state("camera_blocked", block)
+    return ok, err
 
 
 # ── Microphone control ────────────────────────────────────────────────────────
@@ -167,7 +184,17 @@ def set_mic_suspended(suspend: bool) -> tuple[bool, str]:
                 return False, r.stderr.strip()
         except Exception as e:
             return False, str(e)
+    _save_state("mic_suspended", suspend)
     return True, ""
+
+
+def restore_device_state():
+    """Re-apply camera/mic block state saved before last shutdown."""
+    s = _load_state()
+    if s.get("camera_blocked"):
+        set_camera_blocked(True)
+    if s.get("mic_suspended"):
+        set_mic_suspended(True)
 
 
 def kill_mic_stream(stream_index: str) -> tuple[bool, str]:
