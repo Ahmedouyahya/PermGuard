@@ -50,22 +50,22 @@ App opens /dev/video0          App starts capturing mic
          ┌──────────────┼───────────────┐
          ▼              ▼               ▼
    Rule = ALLOW    Rule = DENY     No rule yet
-   (let it run)   (kill it now)        │
-                                       ▼
+   (let it run)   (kill it now)         │
+                                        ▼
                               Show permission dialog
                               ┌─────────────────────┐
-                              │  Firefox             │
-                              │  wants your camera   │
-                              │                      │
-                              │ [Deny][Once][Allow]  │
+                              │  Firefox            │
+                              │  wants your camera  │
+                              │                     │
+                              │ [Deny][Once][Allow] │
                               └─────────────────────┘
                                         │
                   ┌─────────────────────┼──────────────────────┐
-                  ▼                     ▼                       ▼
-               Deny                 Once                    Allow
-          Kill process         Let it run             Let it run
-          Save rule?           Don't save             Save rule?
-          (if checked)                                (if checked)
+                  ▼                     ▼                      ▼
+                 Deny                 Once                  Allow
+             Kill process          Let it run             Let it run
+            Save rule?             Don't save             Save rule?
+            (if checked)                                 (if checked)
 ```
 
 ### Where data lives
@@ -111,7 +111,7 @@ When an unknown app accesses a resource, PermGuard shows this floating dialog (a
 ║  /usr/lib/firefox/firefox            ║
 ║  PID 12345                           ║
 ║                                      ║
-║  ☑ Remember my choice for this app  ║
+║  ☑ Remember my choice for this app   ║
 ║                                      ║
 ║  [Deny]  [Allow this time]  [Allow]  ║
 ╚══════════════════════════════════════╝
@@ -247,13 +247,6 @@ Bug reports and feature requests welcome via [GitHub Issues](https://github.com/
 
 **MIT License** — free to use, modify, and distribute. See [LICENSE](LICENSE) for the full text.
 
-```
-Copyright (c) 2026 PermGuard Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, without restriction.
-```
 
 ---
 
