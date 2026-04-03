@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QLabel, QPushButton, QSystemTrayIcon, QMenu,
     QMessageBox, QGroupBox, QCheckBox, QSpinBox, QTextEdit,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame
+    QTableWidget, QTableWidgetItem, QHeaderView, QFrame,
+    QDialog, QLineEdit, QComboBox
 )
 from PyQt6.QtCore  import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui   import QFont, QIcon, QAction, QColor
@@ -41,8 +42,8 @@ class MainWindow(QMainWindow):
         self._prev_mic    = set()
 
         self.setWindowTitle("PermGuard — Privacy Manager")
-        self.setMinimumSize(960, 620)
-        self.resize(1080, 680)
+        self.setMinimumSize(1100, 660)
+        self.resize(1280, 740)
         self.setStyleSheet(MAIN_STYLE)
 
         self._build_ui()
@@ -354,28 +355,37 @@ class _PermissionsTab(QWidget):
         super().__init__()
         self.db = db
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
 
+        # Header
         hdr = QHBoxLayout()
+        ico = QLabel("🔑")
+        ico.setFont(QFont("Noto Color Emoji", 20))
+        ico.setFixedWidth(32)
         ttl = QLabel("App Permissions")
         ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
         ttl.setStyleSheet(f"color:{C['text']};")
-        sub = QLabel("Saved decisions — edit or revoke any rule")
+        sub = QLabel("Saved allow/deny rules per app — set manually or auto-saved from dialogs")
         sub.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
         left = QVBoxLayout()
         left.setSpacing(2)
         left.addWidget(ttl)
         left.addWidget(sub)
-        ico = QLabel("🔑")
-        ico.setFont(QFont("Noto Color Emoji", 18))
         hdr.addWidget(ico)
         hdr.addLayout(left)
         hdr.addStretch()
+
+        add_btn = QPushButton("+ Add Rule")
+        add_btn.setObjectName("success")
+        add_btn.setFixedWidth(110)
+        add_btn.clicked.connect(self._add_rule_dialog)
+        hdr.addWidget(add_btn)
         layout.addLayout(hdr)
         layout.addWidget(hsep())
 
         self._body = QVBoxLayout()
+        self._body.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self._body)
 
         foot = QHBoxLayout()
@@ -383,7 +393,7 @@ class _PermissionsTab(QWidget):
         clr_btn = QPushButton("Reset All Rules")
         clr_btn.setObjectName("danger")
         clr_btn.clicked.connect(self._reset_all)
-        r_btn = QPushButton("⟳  Refresh")
+        r_btn = QPushButton("↻  Refresh")
         r_btn.setObjectName("flat")
         r_btn.clicked.connect(self.refresh)
         foot.addWidget(clr_btn)
@@ -400,20 +410,24 @@ class _PermissionsTab(QWidget):
 
         rules = self.db.all_rules()
         if not rules:
-            lbl = QLabel("  No saved rules yet.\n  Permission dialogs will appear when apps request access.")
-            lbl.setStyleSheet(f"color:{C['muted']}; padding:24px;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._body.addWidget(lbl)
+            from .widgets import _EmptyState
+            self._body.addWidget(_EmptyState(
+                "No saved rules yet — dialogs will appear when apps request access",
+                icon="🔑"
+            ))
             return
 
         ncols = 4
         tbl = QTableWidget(len(rules), ncols)
-        tbl.setHorizontalHeaderLabels(["App", "Resource", "Decision", "Action"])
+        tbl.setHorizontalHeaderLabels(["App", "Resource", "Decision", ""])
         tbl.verticalHeader().setVisible(False)
         tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         tbl.setAlternatingRowColors(True)
+        tbl.setShowGrid(False)
+        tbl.verticalHeader().setDefaultSectionSize(38)
         hdr = tbl.horizontalHeader()
+        hdr.setHighlightSections(False)
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -422,7 +436,7 @@ class _PermissionsTab(QWidget):
 
         for r, (app, res, decision) in enumerate(rules):
             tbl.setItem(r, 0, QTableWidgetItem(app))
-            tbl.setItem(r, 1, QTableWidgetItem(res))
+            tbl.setItem(r, 1, QTableWidgetItem(res.capitalize()))
             d_item = QTableWidgetItem(decision.upper())
             color = C["success"] if decision == "allow" else C["danger"]
             d_item.setForeground(QColor(color))
@@ -434,6 +448,91 @@ class _PermissionsTab(QWidget):
             tbl.setCellWidget(r, 3, btn)
 
         self._body.addWidget(tbl)
+
+    def _add_rule_dialog(self):
+        """Small dialog to manually add an allow/deny rule."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Add Permission Rule")
+        dlg.setFixedWidth(360)
+        dlg.setStyleSheet(
+            f"QDialog {{ background:{C['panel']}; color:{C['text']}; "
+            f"font-family:Inter,sans-serif; }}"
+            f"QLabel {{ color:{C['text']}; }}"
+            f"QLineEdit, QComboBox {{ background:{C['surface']}; color:{C['text']}; "
+            f"border:1px solid {C['border']}; border-radius:6px; padding:6px 10px; font-size:13px; }}"
+            f"QLineEdit:focus, QComboBox:focus {{ border-color:{C['accent']}; }}"
+            f"QComboBox::drop-down {{ border:none; }}"
+            f"QPushButton {{ background:{C['surface']}; color:{C['text']}; "
+            f"border:1px solid {C['border']}; border-radius:6px; padding:8px 18px; font-weight:500; }}"
+            f"QPushButton:hover {{ background:{C['border']}; border-color:{C['accent']}; color:{C['accent']}; }}"
+            f"QPushButton#save {{ background:{C['success']}; color:{C['bg']}; border-color:{C['success']}; }}"
+            f"QPushButton#save:hover {{ background:#8fbcbb; }}"
+        )
+
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 22, 22, 20)
+        lay.setSpacing(14)
+
+        title_lbl = QLabel("Add Permission Rule")
+        title_lbl.setFont(QFont("Inter", 13, QFont.Weight.Bold))
+        lay.addWidget(title_lbl)
+
+        sub_lbl = QLabel("Set a permanent allow or deny rule for any app.")
+        sub_lbl.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
+        sub_lbl.setWordWrap(True)
+        lay.addWidget(sub_lbl)
+
+        # App name input
+        app_lbl = QLabel("App name (process name, e.g. firefox, zoom, obs)")
+        app_lbl.setStyleSheet(f"color:{C['muted']}; font-size:11px;")
+        app_input = QLineEdit()
+        app_input.setPlaceholderText("e.g. firefox")
+        lay.addWidget(app_lbl)
+        lay.addWidget(app_input)
+
+        # Resource picker
+        res_lbl = QLabel("Resource")
+        res_lbl.setStyleSheet(f"color:{C['muted']}; font-size:11px;")
+        res_combo = QComboBox()
+        res_combo.addItems(["camera", "microphone", "screen"])
+        lay.addWidget(res_lbl)
+        lay.addWidget(res_combo)
+
+        # Decision picker
+        dec_lbl = QLabel("Decision")
+        dec_lbl.setStyleSheet(f"color:{C['muted']}; font-size:11px;")
+        dec_combo = QComboBox()
+        dec_combo.addItems(["allow", "deny"])
+        lay.addWidget(dec_lbl)
+        lay.addWidget(dec_combo)
+
+        lay.addSpacing(4)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        cancel_btn = QPushButton("Cancel")
+        save_btn   = QPushButton("Save Rule")
+        save_btn.setObjectName("save")
+        cancel_btn.clicked.connect(dlg.reject)
+
+        def _save():
+            name = app_input.text().strip()
+            if not name:
+                app_input.setStyleSheet(
+                    f"border:1px solid {C['danger']}; border-radius:6px; "
+                    f"padding:6px 10px; background:{C['surface']}; color:{C['text']};")
+                return
+            self.db.set(name, res_combo.currentText(), dec_combo.currentText())
+            self.db.log(f"Manual rule: {name} → {res_combo.currentText()} = {dec_combo.currentText()}")
+            dlg.accept()
+            self.refresh()
+
+        save_btn.clicked.connect(_save)
+        btn_row.addStretch()
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(save_btn)
+        lay.addLayout(btn_row)
+
+        dlg.exec()
 
     def _revoke(self, app: str, resource: str):
         self.db.remove(app, resource)
