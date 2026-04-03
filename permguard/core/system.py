@@ -77,14 +77,42 @@ def proc_icon_path(app_name: str) -> str | None:
     return None
 
 
-def kill_pid(pid: str, sig: int = 15) -> tuple[bool, str]:
+def kill_pid(pid: str) -> tuple[bool, str]:
+    """Terminate a process. Tries SIGTERM → SIGKILL → pkexec kill."""
     try:
-        os.kill(int(pid), sig)
+        ipid = int(pid)
+    except ValueError:
+        return False, f"Invalid PID: {pid}"
+
+    import signal as _signal, time as _time
+
+    # 1. SIGTERM — polite request
+    try:
+        os.kill(ipid, _signal.SIGTERM)
+        _time.sleep(0.3)
+        # Check if it's gone
+        os.kill(ipid, 0)   # raises ProcessLookupError if dead
+    except ProcessLookupError:
+        return True, ""    # gone after SIGTERM
+    except PermissionError:
+        pass               # we own it but can't check, fall through
+    except Exception as e:
+        # SIGTERM itself failed — likely PermissionError
+        pass
+
+    # 2. SIGKILL — force
+    try:
+        os.kill(ipid, _signal.SIGKILL)
         return True, ""
     except ProcessLookupError:
-        return True, ""   # already gone
+        return True, ""    # gone
+    except PermissionError:
+        pass               # need elevated privileges
     except Exception as e:
         return False, str(e)
+
+    # 3. pkexec kill -9 — root fallback
+    return run_privileged(["kill", "-9", str(pid)])
 
 
 # ── Camera control ────────────────────────────────────────────────────────────

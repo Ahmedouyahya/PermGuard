@@ -139,7 +139,8 @@ class MainWindow(QMainWindow):
         bl.setContentsMargins(20, 0, 20, 0)
         bl.setSpacing(10)
 
-        logo = QLabel("🛡  PermGuard")
+        from .. import __version__
+        logo = QLabel(f"🛡  PermGuard  v{__version__}")
         logo.setFont(QFont("Inter", 14, QFont.Weight.Bold))
         logo.setStyleSheet(f"color:{C['accent']}; background:transparent;")
 

@@ -39,6 +39,16 @@ echo -e "${NC}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── Pull latest from GitHub (if this is a git repo) ──────────────────────────
+if [[ -d "$SCRIPT_DIR/.git" ]]; then
+    info "Pulling latest version from GitHub..."
+    if git -C "$SCRIPT_DIR" pull --ff-only 2>&1; then
+        ok "Up to date"
+    else
+        warn "Git pull failed — installing from local files"
+    fi
+fi
+
 # ── Python check ──────────────────────────────────────────────────────────────
 info "Checking Python 3.10+..."
 PYTHON=$(command -v python3 || true)
