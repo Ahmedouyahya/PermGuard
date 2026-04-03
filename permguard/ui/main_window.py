@@ -133,16 +133,26 @@ class MainWindow(QMainWindow):
         # Top bar
         bar = QWidget()
         bar.setStyleSheet(f"background:{C['panel']}; border-bottom:1px solid {C['border']};")
-        bar.setFixedHeight(50)
+        bar.setFixedHeight(52)
         bl = QHBoxLayout(bar)
         bl.setContentsMargins(20, 0, 20, 0)
+        bl.setSpacing(10)
+
         logo = QLabel("🛡  PermGuard")
         logo.setFont(QFont("Inter", 14, QFont.Weight.Bold))
         logo.setStyleSheet(f"color:{C['accent']}; background:transparent;")
-        self._status_lbl = QLabel("Monitoring…")
-        self._status_lbl.setStyleSheet(f"color:{C['muted']}; font-size:12px; background:transparent;")
+
+        # Green dot + status text
+        self._dot_lbl = QLabel("●")
+        self._dot_lbl.setStyleSheet(
+            f"color:{C['success']}; font-size:10px; background:transparent;")
+        self._status_lbl = QLabel("Monitoring")
+        self._status_lbl.setStyleSheet(
+            f"color:{C['muted']}; font-size:12px; background:transparent;")
+
         bl.addWidget(logo)
         bl.addStretch()
+        bl.addWidget(self._dot_lbl)
         bl.addWidget(self._status_lbl)
         root.addWidget(bar)
 
@@ -222,7 +232,9 @@ class MainWindow(QMainWindow):
             live[idx].refresh()
 
         now = datetime.datetime.now().strftime("%H:%M:%S")
-        self._status_lbl.setText(f"Last refresh: {now}")
+        self._status_lbl.setText(f"Updated {now}")
+        self._dot_lbl.setStyleSheet(
+            f"color:{C['success']}; font-size:10px; background:transparent;")
 
     # ── Close ─────────────────────────────────────────────────────────────────
 
@@ -256,7 +268,7 @@ class _DashboardTab(QWidget):
 
         title = QLabel("Privacy Overview")
         title.setFont(QFont("Inter", 16, QFont.Weight.Bold))
-        title.setStyleSheet(f"color:{C['accent']};")
+        title.setStyleSheet(f"color:{C['text']};")
         layout.addWidget(title)
         layout.addWidget(hsep())
 
@@ -348,7 +360,7 @@ class _PermissionsTab(QWidget):
         hdr = QHBoxLayout()
         ttl = QLabel("App Permissions")
         ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
-        ttl.setStyleSheet(f"color:{C['accent']};")
+        ttl.setStyleSheet(f"color:{C['text']};")
         sub = QLabel("Saved decisions — edit or revoke any rule")
         sub.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
         left = QVBoxLayout()

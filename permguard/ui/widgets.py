@@ -26,7 +26,7 @@ def badge(text: str, color: str) -> QLabel:
     fg = C["bg"] if color not in (C["danger"], C["purple"]) else "white"
     lbl.setStyleSheet(
         f"background:{color}; color:{fg}; border-radius:10px;"
-        f"padding:2px 10px; font-weight:700; font-size:11px;"
+        f"padding:3px 10px; font-weight:700; font-size:11px; letter-spacing:0.5px;"
     )
     return lbl
 
@@ -46,15 +46,20 @@ def build_table(headers: list, rows: list,
     tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     tbl.setAlternatingRowColors(True)
+    tbl.setShowGrid(False)
+    tbl.verticalHeader().setDefaultSectionSize(38)
     hdr = tbl.horizontalHeader()
     hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    hdr.setHighlightSections(False)
     if has_action:
         hdr.setSectionResizeMode(len(headers), QHeaderView.ResizeMode.Fixed)
         tbl.setColumnWidth(len(headers), 90)
 
     for r, row in enumerate(rows):
         for c, val in enumerate(row):
-            tbl.setItem(r, c, QTableWidgetItem(str(val)))
+            item = QTableWidgetItem(str(val))
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            tbl.setItem(r, c, item)
         if has_action and refresh_fn:
             if kill_col is not None:
                 pid  = str(row[kill_col])
@@ -98,35 +103,40 @@ class PermTab(QWidget):
         self._badge_lbl = QLabel()
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 16)
+        layout.setSpacing(12)
 
-        # Header
+        # Header row
         hdr = QHBoxLayout()
+        hdr.setSpacing(14)
         ico = QLabel(icon)
-        ico.setFont(QFont("Noto Color Emoji", 18))
+        ico.setFont(QFont("Noto Color Emoji", 20))
+        ico.setFixedWidth(32)
+
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
         ttl = QLabel(title)
         ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
-        ttl.setStyleSheet(f"color: {C['accent']};")
+        ttl.setStyleSheet(f"color: {C['text']};")
         sub = QLabel(desc)
         sub.setStyleSheet(f"color: {C['muted']}; font-size: 12px;")
-        left = QVBoxLayout()
-        left.setSpacing(2)
-        left.addWidget(ttl)
-        left.addWidget(sub)
+        text_col.addWidget(ttl)
+        text_col.addWidget(sub)
+
         hdr.addWidget(ico)
-        hdr.addLayout(left)
+        hdr.addLayout(text_col)
         hdr.addStretch()
         hdr.addWidget(self._badge_lbl)
         layout.addLayout(hdr)
         layout.addWidget(hsep())
 
         self._body = QVBoxLayout()
+        self._body.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self._body)
 
         foot = QHBoxLayout()
         foot.addStretch()
-        r_btn = QPushButton("⟳  Refresh")
+        r_btn = QPushButton("↻  Refresh")
         r_btn.setObjectName("flat")
         r_btn.clicked.connect(self.refresh)
         foot.addWidget(r_btn)
@@ -142,23 +152,47 @@ class PermTab(QWidget):
                 c.widget().deleteLater()
 
         if not rows:
-            lbl = QLabel("  No active access detected")
-            lbl.setStyleSheet(f"color: {C['muted']}; padding: 24px;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._body.addWidget(lbl)
+            placeholder = _EmptyState("Nothing active right now")
+            self._body.addWidget(placeholder)
             self._badge_lbl.setText("Safe")
             self._badge_lbl.setStyleSheet(
                 f"background:{C['success']};color:{C['bg']};border-radius:10px;"
-                f"padding:2px 10px;font-weight:700;font-size:11px;")
+                f"padding:3px 10px;font-weight:700;font-size:11px;")
         else:
             tbl = build_table(self.headers, rows,
                               kill_col=self.kill_col, refresh_fn=self.refresh)
             self._body.addWidget(tbl)
-            self._badge_lbl.setText(f"{len(rows)} Active")
+            self._badge_lbl.setText(f"  {len(rows)} Active  ")
             self._badge_lbl.setStyleSheet(
                 f"background:{C['danger']};color:white;border-radius:10px;"
-                f"padding:2px 10px;font-weight:700;font-size:11px;")
+                f"padding:3px 10px;font-weight:700;font-size:11px;")
         return rows
+
+
+# ── Empty state placeholder ───────────────────────────────────────────────────
+
+class _EmptyState(QWidget):
+    def __init__(self, message: str, icon: str = "✓"):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(8)
+
+        ico = QLabel(icon)
+        ico.setFont(QFont("Noto Color Emoji", 28))
+        ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ico.setStyleSheet(f"color: {C['success']}; background: transparent;")
+
+        lbl = QLabel(message)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet(
+            f"color: {C['muted']}; font-size: 13px; background: transparent;")
+
+        layout.addStretch()
+        layout.addWidget(ico)
+        layout.addWidget(lbl)
+        layout.addStretch()
+        self.setMinimumHeight(140)
 
 
 # ── Stat Card (for dashboard) ─────────────────────────────────────────────────
@@ -166,41 +200,57 @@ class PermTab(QWidget):
 class StatCard(QFrame):
     clicked = pyqtSignal()
 
+    _BASE_STYLE = (
+        f"QFrame#card {{ background:{C['panel']}; border-radius:12px;"
+        f"border:1px solid {C['border']}; }}"
+    )
+    _HOVER_STYLE = (
+        f"QFrame#card {{ background:{C['hover']}; border-radius:12px;"
+        f"border:1px solid {C['accent']}40; }}"
+    )
+
     def __init__(self, icon: str, title: str, accent: str):
         super().__init__()
         self.setObjectName("card")
-        self.setStyleSheet(
-            f"QFrame#card {{ background:{C['panel']}; border-radius:12px;"
-            f"border:1px solid {C['border']}; }}"
-        )
-        self.setFixedHeight(96)
+        self.setStyleSheet(self._BASE_STYLE)
+        self.setFixedHeight(100)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._accent = accent
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(6)
 
         top = QHBoxLayout()
         ico_lbl = QLabel(icon)
-        ico_lbl.setFont(QFont("Noto Color Emoji", 16))
+        ico_lbl.setFont(QFont("Noto Color Emoji", 18))
         self._count = QLabel("—")
-        self._count.setFont(QFont("Inter", 22, QFont.Weight.Bold))
+        self._count.setFont(QFont("Inter", 24, QFont.Weight.Bold))
+        self._count.setStyleSheet(f"color: {C['muted']};")
         top.addWidget(ico_lbl)
         top.addStretch()
         top.addWidget(self._count)
         layout.addLayout(top)
 
         self._title = QLabel(title)
-        self._title.setStyleSheet(f"color: {C['muted']}; font-size: 12px;")
+        self._title.setStyleSheet(f"color: {C['muted']}; font-size: 12px; font-weight: 500;")
         layout.addWidget(self._title)
 
     def update(self, count: int):
         if count:
             self._count.setText(str(count))
-            self._count.setStyleSheet(f"color: {C['danger']};")
+            self._count.setStyleSheet(f"color: {C['danger']}; font-size: 24px; font-weight: 700;")
         else:
             self._count.setText("✓")
-            self._count.setStyleSheet(f"color: {C['success']};")
+            self._count.setStyleSheet(f"color: {C['success']}; font-size: 24px; font-weight: 700;")
+
+    def enterEvent(self, event):
+        self.setStyleSheet(self._HOVER_STYLE)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setStyleSheet(self._BASE_STYLE)
+        super().leaveEvent(event)
 
     def mousePressEvent(self, _):
         self.clicked.emit()
