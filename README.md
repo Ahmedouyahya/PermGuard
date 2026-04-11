@@ -20,7 +20,8 @@ git clone https://github.com/Ahmedouyahya/PermGuard.git && cd PermGuard && bash 
 The installer detects your distro (Debian/Ubuntu, Fedora, Arch, openSUSE), installs all dependencies, and sets up a systemd user service so PermGuard starts automatically at every login.
 
 ```bash
-permguard          # launch manually
+permguard             # launch manually
+python -m permguard   # equivalent — useful when the wrapper isn't on PATH
 permguard --version
 ```
 
@@ -81,7 +82,7 @@ The app is **completely frozen** while you decide — it cannot read a single fr
 | ⚙️ Processes | Top processes by CPU, kill button |
 | 🔥 Firewall | Active network blocks per app (iptables) |
 | 📂 Files | Protected directories — add paths, view access events |
-| 🔑 Permissions | All saved allow/deny rules, add rules manually, revoke any |
+| 🔑 Permissions | All saved allow/deny rules for camera, mic, screen, **filesystem**, and **package installs** — add rules manually, revoke any |
 | ⚙ Settings | Autostart, refresh interval, event log |
 
 ### Permission flow
@@ -98,10 +99,21 @@ All decisions survive reboots:
 
 | File | What's stored |
 |---|---|
-| `~/.local/share/permguard/permissions.json` | Per-app allow/deny rules |
-| `~/.local/share/permguard/firewall_rules.json` | Network blocks (re-applied at startup) |
+| `~/.local/share/permguard/permissions.json` | Per-app allow/deny rules + notification/interval settings |
+| `~/.local/share/permguard/firewall_rules.json` | Network blocks (re-applied at startup, de-duplicated against live iptables) |
 | `~/.local/share/permguard/device_state.json` | Camera/mic block state (re-applied at startup) |
-| `~/.local/share/permguard/events.log` | Full audit log |
+| `~/.local/share/permguard/timeline.json` | Last 7 days of access events for the Privacy Dashboard |
+| `~/.local/share/permguard/events.log` | Full audit log (rotated at 5000 lines) |
+
+Every state file is written **atomically** (temp file + `os.replace`) with `0o600` permissions, and the data directory itself is `0o700` — no other user on the machine can read your rules, log, or timeline.
+
+### Reliability & security hardening
+
+- **Zombie-proof dialogs** — if an app exits while its permission prompt is still on screen, PermGuard dismisses the stale dialog and thaws the frozen process automatically instead of leaving an orphaned popup.
+- **Self-exclusion** — the file monitor skips its own PID and child processes so PermGuard can never freeze itself while reading its own config.
+- **Firewall idempotency** — on restart, existing `iptables` DROP rules are detected with `iptables -C` and skipped, so restarting the service can no longer pile up duplicate rules.
+- **Shell-injection safe** — privileged writes to sysfs (`/sys/bus/usb/.../authorized`) go through `pkexec tee` with the value on stdin; no untrusted device ID ever touches a shell.
+- **Thread-safe timeline** — concurrent monitor threads write to the event timeline through an in-memory cache guarded by a lock, so events from simultaneous camera/mic/file accesses can't clobber each other.
 
 ### Systemd service
 
@@ -200,7 +212,8 @@ All installed automatically by `install.sh`.
 
 ```
 permguard/
-├── main.py                     ← Entry point, wires monitors → UI
+├── __main__.py                 ← `python -m permguard` entry point
+├── main.py                     ← Wires monitors → UI, handles --version/--help
 │
 ├── core/
 │   ├── monitor.py              ← Background QThreads
