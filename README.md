@@ -88,7 +88,7 @@ The app is **completely frozen** while you decide — it cannot read a single fr
 ### Permission flow
 
 - **Camera & Mic** — detected via `/proc/<pid>/fd` symlinks and `pactl`. Frozen with SIGSTOP, resumed with SIGCONT or killed with SIGKILL.
-- **File access** — inotify watches on protected directories (`~/.ssh`, `~/.gnupg` by default, user-configurable). Access detected via `/proc` fd scan.
+- **File access** — inotify watches on protected directories (`~/.ssh`, `~/.gnupg`, `~/.config/permguard` by default, user-configurable). Access detected via `/proc` fd scan.
 - **Package installs** — `/proc` polled every 2s for `apt`, `pip`, `npm`, `snap`, `flatpak`, `pacman`, `dnf`, `cargo`, and 15+ other package managers.
 - **Network blocking** — `iptables OUTPUT` rules keyed by UID. Persisted across reboots.
 - **USB control** — reads/writes `/sys/bus/usb/devices/<id>/authorized` via pkexec.
@@ -102,7 +102,7 @@ All decisions survive reboots:
 | `~/.local/share/permguard/permissions.json` | Per-app allow/deny rules + notification/interval settings |
 | `~/.local/share/permguard/firewall_rules.json` | Network blocks (re-applied at startup, de-duplicated against live iptables) |
 | `~/.local/share/permguard/device_state.json` | Camera/mic block state (re-applied at startup) |
-| `~/.local/share/permguard/timeline.json` | Last 7 days of access events for the Privacy Dashboard |
+| `~/.local/share/permguard/timeline.json` | Last 7 days of access events (shown on the Dashboard tab) |
 | `~/.local/share/permguard/events.log` | Full audit log (rotated at 5000 lines) |
 
 Every state file is written **atomically** (temp file + `os.replace`) with `0o600` permissions, and the data directory itself is `0o700` — no other user on the machine can read your rules, log, or timeline.
