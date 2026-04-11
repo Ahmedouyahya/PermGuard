@@ -47,15 +47,15 @@ App opens /dev/video0  ──▶  CameraMonitor detects it
                             SIGSTOP (freeze app)
                                      │
                             ┌────────▼────────┐
-                            │  📷 Firefox      │
-                            │  wants your      │
-                            │  camera          │
-                            │  Frozen...       │
-                            │                  │
-                            │  [Allow]         │
-                            │  [Allow once]    │
-                            │  [Deny]          │
-                            └──────────────────┘
+                            │  📷 Firefox     │
+                            │  wants your     │
+                            │  camera         │
+                            │  Frozen...      │
+                            │                 │
+                            │  [Allow]        │
+                            │  [Allow once]   │
+                            │  [Deny]         │
+                            └─────────────────┘
                                      │
                     ┌────────────────┼──────────────────┐
                     ▼                ▼                   ▼
