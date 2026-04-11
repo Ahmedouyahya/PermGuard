@@ -67,12 +67,13 @@ class PermissionDialog(QDialog):
     AUTO_DENY_SECS = 30
 
     def __init__(self, app_name: str, pid: str, resource: str,
-                 cmdline: str = "", parent=None):
+                 cmdline: str = "", stream_index: str = "", parent=None):
         super().__init__(parent)
-        self.app_name = app_name
-        self.pid      = pid
-        self.resource = resource
-        self.cmdline  = cmdline
+        self.app_name     = app_name
+        self.pid          = pid
+        self.resource     = resource
+        self.cmdline      = cmdline
+        self.stream_index = stream_index
         self._countdown = self.AUTO_DENY_SECS
         self._decided_flag = False   # guard against double-fire
 
@@ -86,6 +87,7 @@ class PermissionDialog(QDialog):
         self.setStyleSheet(DIALOG_STYLE)
         self._build()
         self._start_timer()
+        self._play_alert()
 
         # Position: top-center of screen (like Android)
         screen = self.screen().availableGeometry() if self.screen() else None
@@ -241,6 +243,30 @@ class PermissionDialog(QDialog):
         if self._countdown <= 0:
             self._timer.stop()
             self._decide(DECISION_DENY)
+
+    # ── Alert sound ───────────────────────────────────────────────────────────
+
+    def _play_alert(self):
+        """Play a system notification sound so the user notices the dialog."""
+        import subprocess, shutil
+        if shutil.which("canberra-gtk-play"):
+            try:
+                subprocess.Popen(
+                    ["canberra-gtk-play", "-i", "dialog-warning"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+        elif shutil.which("paplay"):
+            # Freedesktop fallback
+            for path in ("/usr/share/sounds/freedesktop/stereo/dialog-warning.oga",
+                         "/usr/share/sounds/freedesktop/stereo/bell.oga"):
+                try:
+                    subprocess.Popen(
+                        ["paplay", path],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    break
+                except Exception:
+                    pass
 
     # ── Decision ──────────────────────────────────────────────────────────────
 

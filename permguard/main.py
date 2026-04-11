@@ -79,6 +79,12 @@ def main():
     file_mon.new_access.connect(win.handle_access)
     pkg_mon.new_access.connect(win.handle_access)
 
+    # access_gone → clean up dialogs / thaw dead processes
+    cam_mon.access_gone.connect(win.handle_access_gone)
+    mic_mon.access_gone.connect(win.handle_access_gone)
+    file_mon.access_gone.connect(win.handle_access_gone)
+    pkg_mon.access_gone.connect(win.handle_access_gone)
+
     cam_mon.start()
     mic_mon.start()
     file_mon.start()

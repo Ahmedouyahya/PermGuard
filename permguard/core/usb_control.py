@@ -75,7 +75,8 @@ def set_authorized(device_id: str, authorized: bool) -> tuple[bool, str]:
         return False, f"Device {device_id} not found"
 
     val = "1" if authorized else "0"
-    return run_privileged(["sh", "-c", f"echo {val} > {auth_path}"])
+    # Use tee instead of sh -c to avoid shell injection via device_id
+    return run_privileged(["tee", str(auth_path)], stdin_data=val)
 
 
 def disable_all_usb() -> tuple[bool, str]:

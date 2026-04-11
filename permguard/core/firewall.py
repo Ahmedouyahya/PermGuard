@@ -10,7 +10,7 @@ Limitation: iptables owner module blocks by UID, not PID.
 If multiple apps run as the same user, they are all affected.
 Root-owned processes require a different approach (cgroup-based).
 """
-import os, json, re
+import os, json, re, tempfile
 from pathlib import Path
 from .system import run, run_privileged, proc_name
 
@@ -27,7 +27,18 @@ def _load() -> dict:
 
 def _save(rules: dict):
     RULES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    RULES_FILE.write_text(json.dumps(rules, indent=2))
+    fd, tmp = tempfile.mkstemp(prefix=".tmp_", dir=str(RULES_FILE.parent))
+    try:
+        os.write(fd, json.dumps(rules, indent=2).encode())
+        os.close(fd)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, RULES_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -52,16 +63,24 @@ def _kill_connections(pid: str):
                 run(["ss", "--kill", "dst", dst])
 
 def _iptables_rule(action: str, uid: int) -> tuple[bool, str]:
-    """Add (-I) or remove (-D) an iptables OUTPUT rule for a UID."""
-    ok1, e1 = run_privileged([
+    """Add (-I) or remove (-D) an iptables OUTPUT rule for a UID.
+    Note: -m owner only works on OUTPUT (locally generated packets),
+    not INPUT. Blocking OUTPUT is sufficient to cut off network access."""
+    ok, err = run_privileged([
         "iptables", action, "OUTPUT",
         "-m", "owner", "--uid-owner", str(uid), "-j", "DROP"
     ])
-    ok2, e2 = run_privileged([
-        "iptables", action, "INPUT",
+    return ok, err
+
+
+def _iptables_rule_exists(uid: int) -> bool:
+    """Return True if a DROP rule for this uid is already in OUTPUT."""
+    ok, _ = run_privileged([
+        "iptables", "-C", "OUTPUT",
         "-m", "owner", "--uid-owner", str(uid), "-j", "DROP"
     ])
-    return ok1 and ok2, (e1 or e2)
+    return ok
+
 
 def iptables_available() -> bool:
     import shutil
@@ -86,10 +105,11 @@ def block_app(pid: str, app_name: str) -> tuple[bool, str]:
     # Kill existing connections immediately
     _kill_connections(pid)
 
-    # Add iptables rule
-    ok, err = _iptables_rule("-I", uid)
-    if not ok:
-        return False, f"iptables failed: {err}"
+    # Add iptables rule (skip if already present to avoid duplicates)
+    if not _iptables_rule_exists(uid):
+        ok, err = _iptables_rule("-I", uid)
+        if not ok:
+            return False, f"iptables failed: {err}"
 
     # Persist
     rules = _load()
@@ -133,6 +153,10 @@ def clear_all_blocks() -> tuple[bool, str]:
 
 
 def restore_rules_on_startup():
-    """Re-apply persisted rules after reboot (called at app start)."""
+    """Re-apply persisted rules after reboot (called at app start).
+    Skips UIDs that already have a matching DROP rule, so restarts
+    without a reboot don't accumulate duplicate rules."""
     for info in get_blocked_apps():
-        _iptables_rule("-I", info["uid"])
+        uid = info["uid"]
+        if not _iptables_rule_exists(uid):
+            _iptables_rule("-I", uid)

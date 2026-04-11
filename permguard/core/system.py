@@ -17,6 +17,10 @@ def _save_state(key: str, value: bool):
     s = _load_state()
     s[key] = value
     _STATE_FILE.write_text(json.dumps(s))
+    try:
+        os.chmod(_STATE_FILE, 0o600)
+    except OSError:
+        pass
 
 
 # ── Shell ─────────────────────────────────────────────────────────────────────
@@ -28,15 +32,24 @@ def run(cmd: list, timeout: int = 5) -> str:
         return ""
 
 
-def run_privileged(cmd: list) -> tuple[bool, str]:
-    """Run a command with pkexec (graphical sudo prompt)."""
+def run_privileged(cmd: list, stdin_data: str | None = None) -> tuple[bool, str]:
+    """Run a command with pkexec (graphical sudo prompt).
+    If stdin_data is given, it is piped to the command's stdin."""
     try:
-        r = subprocess.run(["pkexec"] + cmd, capture_output=True, text=True, timeout=15)
+        r = subprocess.run(
+            ["pkexec"] + cmd,
+            input=stdin_data,
+            capture_output=True, text=True, timeout=15,
+        )
         return r.returncode == 0, r.stderr.strip()
     except FileNotFoundError:
         # pkexec not available, try sudo
         try:
-            r = subprocess.run(["sudo", "-n"] + cmd, capture_output=True, text=True, timeout=10)
+            r = subprocess.run(
+                ["sudo", "-n"] + cmd,
+                input=stdin_data,
+                capture_output=True, text=True, timeout=10,
+            )
             return r.returncode == 0, r.stderr.strip()
         except Exception as e:
             return False, str(e)
