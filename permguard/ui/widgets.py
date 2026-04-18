@@ -53,7 +53,7 @@ def build_table(headers: list, rows: list,
     hdr.setHighlightSections(False)
     if has_action:
         hdr.setSectionResizeMode(len(headers), QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers), 130)
+        tbl.setColumnWidth(len(headers), 110)
 
     for r, row in enumerate(rows):
         for c, val in enumerate(row):
@@ -66,8 +66,8 @@ def build_table(headers: list, rows: list,
                 name = str(row[1]) if len(row) > 1 else "?"
                 btn  = QPushButton("Kill")
                 btn.setObjectName("danger")
-                btn.setMinimumWidth(100)
-                btn.setMinimumHeight(32)
+                btn.setMinimumWidth(90)
+                btn.setMinimumHeight(30)
                 btn.clicked.connect(lambda _, p=pid, n=name: _kill_dialog(p, n, refresh_fn))
                 tbl.setCellWidget(r, len(headers), btn)
     return tbl

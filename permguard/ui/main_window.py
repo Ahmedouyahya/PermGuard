@@ -491,8 +491,8 @@ class _DashboardTab(QWidget):
         blk_row = QHBoxLayout()
         self._cam_btn = QPushButton()
         self._mic_btn = QPushButton()
-        self._cam_btn.setMinimumWidth(240)
-        self._mic_btn.setMinimumWidth(240)
+        self._cam_btn.setMinimumWidth(200)
+        self._mic_btn.setMinimumWidth(200)
         self._cam_btn.clicked.connect(self._toggle_cam)
         self._mic_btn.clicked.connect(self._toggle_mic)
         blk_row.addWidget(self._cam_btn)
@@ -1099,8 +1099,8 @@ class _SettingsTab(QWidget):
         row = QHBoxLayout()
         self._update_btn = QPushButton("⟳  Update to latest version")
         self._update_btn.setObjectName("success")
-        self._update_btn.setMinimumWidth(340)
-        self._update_btn.setMinimumHeight(36)
+        self._update_btn.setMinimumWidth(260)
+        self._update_btn.setMinimumHeight(34)
         self._update_btn.clicked.connect(self._run_update)
         row.addWidget(self._update_btn)
         row.addStretch()
@@ -1284,7 +1284,7 @@ class _NetworkTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers)-1, 170)
+        tbl.setColumnWidth(len(headers)-1, 150)
 
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
@@ -1294,8 +1294,8 @@ class _NetworkTab(QWidget):
             blocked = is_blocked(name)
             btn = QPushButton("Unblock" if blocked else "Block Net")
             btn.setObjectName("success" if blocked else "danger")
-            btn.setMinimumWidth(150)
-            btn.setMinimumHeight(32)
+            btn.setMinimumWidth(130)
+            btn.setMinimumHeight(30)
             btn.clicked.connect(lambda _, p=pid, n=name, b=blocked: self._toggle(p, n, b))
             tbl.setCellWidget(r, len(headers)-1, btn)
 
@@ -1337,7 +1337,7 @@ class _USBTab(QWidget):
 
         lockdown_btn = QPushButton("⚠  Disable All USB")
         lockdown_btn.setObjectName("danger")
-        lockdown_btn.setMinimumWidth(210)
+        lockdown_btn.setMinimumWidth(190)
         lockdown_btn.clicked.connect(self._lockdown)
         hdr.addWidget(lockdown_btn)
         layout.addLayout(hdr)
@@ -1377,7 +1377,7 @@ class _USBTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers)-1, 150)
+        tbl.setColumnWidth(len(headers)-1, 130)
 
         for r, p in enumerate(ports):
             authorized = p["authorized"]
@@ -1392,8 +1392,8 @@ class _USBTab(QWidget):
 
             btn = QPushButton("Enable" if not authorized else "Disable")
             btn.setObjectName("success" if not authorized else "danger")
-            btn.setMinimumWidth(130)
-            btn.setMinimumHeight(32)
+            btn.setMinimumWidth(110)
+            btn.setMinimumHeight(30)
             dev_id = p["id"]
             btn.clicked.connect(lambda _, d=dev_id, a=authorized: self._toggle(d, a))
             tbl.setCellWidget(r, len(headers)-1, btn)
@@ -1496,7 +1496,7 @@ class _FirewallTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(3, 150)
+        tbl.setColumnWidth(3, 130)
 
         for r, rule in enumerate(rules):
             tbl.setItem(r, 0, QTableWidgetItem(rule["name"]))
@@ -1504,8 +1504,8 @@ class _FirewallTab(QWidget):
             tbl.setItem(r, 2, QTableWidgetItem(str(rule.get("pid", "?"))))
             btn = QPushButton("Unblock")
             btn.setObjectName("success")
-            btn.setMinimumWidth(130)
-            btn.setMinimumHeight(32)
+            btn.setMinimumWidth(110)
+            btn.setMinimumHeight(30)
             name = rule["name"]
             btn.clicked.connect(lambda _, n=name: self._unblock(n))
             tbl.setCellWidget(r, 3, btn)
