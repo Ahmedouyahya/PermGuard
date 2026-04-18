@@ -1091,8 +1091,8 @@ class _SettingsTab(QWidget):
         from .. import __version__ as _app_ver
         upd = QGroupBox("UPDATES")
         upl = QVBoxLayout(upd)
-        upl.setSpacing(6)
-        upl.setContentsMargins(14, 10, 14, 12)
+        upl.setSpacing(8)
+        upl.setContentsMargins(16, 12, 16, 14)
         ver_lbl = QLabel(f"Installed version:  <b>{_app_ver}</b>")
         ver_lbl.setStyleSheet(f"color:{C['text']};")
         upl.addWidget(ver_lbl)
@@ -1100,22 +1100,24 @@ class _SettingsTab(QWidget):
         desc_lbl.setStyleSheet(f"color:{C['muted']}; font-size:12px;")
         upl.addWidget(desc_lbl)
         row = QHBoxLayout()
+        row.setContentsMargins(0, 4, 0, 0)
         self._update_btn = QPushButton("⟳  Update to latest version")
         self._update_btn.setObjectName("success")
-        self._update_btn.setMinimumWidth(240)
+        self._update_btn.setFixedSize(260, 36)
         self._update_btn.clicked.connect(self._run_update)
         row.addWidget(self._update_btn)
         row.addStretch()
         upl.addLayout(row)
         self._update_output = QTextEdit()
         self._update_output.setReadOnly(True)
-        self._update_output.setMinimumHeight(120)
-        self._update_output.setMaximumHeight(200)
+        self._update_output.setFixedHeight(160)
         self._update_output.setStyleSheet(
             f"background:{C['bg']}; color:{C['muted']}; border:1px solid {C['border']};"
             f"border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px;")
         self._update_output.setVisible(False)
         upl.addWidget(self._update_output)
+        upd.setFixedHeight(140)
+        self._update_group = upd
         layout.addWidget(upd)
 
         # Log
@@ -1196,6 +1198,7 @@ class _SettingsTab(QWidget):
         self._update_btn.setText("Updating…")
         self._update_output.setVisible(True)
         self._update_output.clear()
+        self._update_group.setFixedHeight(320)
 
         worker = UpdateWorker(self)
         self._update_worker = worker   # keep alive
