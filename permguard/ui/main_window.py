@@ -1262,6 +1262,7 @@ class _NetworkTab(QWidget):
         foot = QHBoxLayout()
         foot.addStretch()
         r_btn = QPushButton("⟳  Refresh"); r_btn.setObjectName("flat")
+        r_btn.setFixedSize(110, 30)
         r_btn.clicked.connect(self.refresh)
         foot.addWidget(r_btn)
         layout.addLayout(foot)
@@ -1290,7 +1291,8 @@ class _NetworkTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers)-1, 150)
+        tbl.setColumnWidth(len(headers)-1, 140)
+        tbl.verticalHeader().setDefaultSectionSize(40)
 
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
@@ -1300,8 +1302,7 @@ class _NetworkTab(QWidget):
             blocked = is_blocked(name)
             btn = QPushButton("Unblock" if blocked else "Block Net")
             btn.setObjectName("success" if blocked else "danger")
-            btn.setMinimumWidth(130)
-            btn.setMinimumHeight(30)
+            btn.setFixedSize(120, 30)
             btn.clicked.connect(lambda _, p=pid, n=name, b=blocked: self._toggle(p, n, b))
             tbl.setCellWidget(r, len(headers)-1, btn)
 
@@ -1343,7 +1344,7 @@ class _USBTab(QWidget):
 
         lockdown_btn = QPushButton("⚠  Disable All USB")
         lockdown_btn.setObjectName("danger")
-        lockdown_btn.setMinimumWidth(190)
+        lockdown_btn.setFixedSize(180, 32)
         lockdown_btn.clicked.connect(self._lockdown)
         hdr.addWidget(lockdown_btn)
         layout.addLayout(hdr)
@@ -1355,6 +1356,7 @@ class _USBTab(QWidget):
         foot = QHBoxLayout()
         foot.addStretch()
         r_btn = QPushButton("⟳  Refresh"); r_btn.setObjectName("flat")
+        r_btn.setFixedSize(110, 30)
         r_btn.clicked.connect(self.refresh)
         foot.addWidget(r_btn)
         layout.addLayout(foot)
@@ -1383,7 +1385,8 @@ class _USBTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers)-1, 130)
+        tbl.setColumnWidth(len(headers)-1, 120)
+        tbl.verticalHeader().setDefaultSectionSize(40)
 
         for r, p in enumerate(ports):
             authorized = p["authorized"]
@@ -1398,8 +1401,7 @@ class _USBTab(QWidget):
 
             btn = QPushButton("Enable" if not authorized else "Disable")
             btn.setObjectName("success" if not authorized else "danger")
-            btn.setMinimumWidth(110)
-            btn.setMinimumHeight(30)
+            btn.setFixedSize(100, 30)
             dev_id = p["id"]
             btn.clicked.connect(lambda _, d=dev_id, a=authorized: self._toggle(d, a))
             tbl.setCellWidget(r, len(headers)-1, btn)
