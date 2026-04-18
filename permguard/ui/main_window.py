@@ -491,8 +491,8 @@ class _DashboardTab(QWidget):
         blk_row = QHBoxLayout()
         self._cam_btn = QPushButton()
         self._mic_btn = QPushButton()
-        self._cam_btn.setFixedWidth(220)
-        self._mic_btn.setFixedWidth(220)
+        self._cam_btn.setMinimumWidth(240)
+        self._mic_btn.setMinimumWidth(240)
         self._cam_btn.clicked.connect(self._toggle_cam)
         self._mic_btn.clicked.connect(self._toggle_mic)
         blk_row.addWidget(self._cam_btn)
@@ -699,7 +699,7 @@ class _PermissionsTab(QWidget):
 
         add_btn = QPushButton("+ Add Rule")
         add_btn.setObjectName("success")
-        add_btn.setFixedWidth(110)
+        add_btn.setMinimumWidth(120)
         add_btn.clicked.connect(self._add_rule_dialog)
         hdr.addWidget(add_btn)
         hdr_layout.addLayout(hdr)
@@ -808,7 +808,7 @@ class _PermissionsTab(QWidget):
         # Revoke all button
         revoke_all = QPushButton("Revoke All")
         revoke_all.setObjectName("flat")
-        revoke_all.setFixedWidth(90)
+        revoke_all.setMinimumWidth(110)
         revoke_all.clicked.connect(lambda _, a=app_name: self._revoke_all_for_app(a))
         top.addWidget(revoke_all)
 
@@ -845,7 +845,7 @@ class _PermissionsTab(QWidget):
             # Toggle button
             toggle = QPushButton("Switch to Deny" if decision == "allow" else "Switch to Allow")
             toggle.setObjectName("flat")
-            toggle.setFixedWidth(130)
+            toggle.setMinimumWidth(160)
             toggle.clicked.connect(
                 lambda _, a=app_name, r=resource, d=decision:
                     self._toggle_rule(a, r, d))
@@ -1082,10 +1082,37 @@ class _SettingsTab(QWidget):
         fpl = QVBoxLayout(fp)
         fpl.addWidget(QLabel("Manage Flatpak app permissions (camera, mic, filesystem…)"))
         fsb = QPushButton("Open Flatseal")
-        fsb.setFixedWidth(150)
+        fsb.setMinimumWidth(160)
         fsb.clicked.connect(self._open_flatseal)
         fpl.addWidget(fsb)
         layout.addWidget(fp)
+
+        # Updates
+        from .. import __version__ as _app_ver
+        upd = QGroupBox("UPDATES")
+        upl = QVBoxLayout(upd)
+        ver_lbl = QLabel(f"Installed version:  <b>{_app_ver}</b>")
+        ver_lbl.setStyleSheet(f"color:{C['text']};")
+        upl.addWidget(ver_lbl)
+        upl.addWidget(QLabel(
+            "Fetches the latest source from GitHub and reinstalls."))
+        row = QHBoxLayout()
+        self._update_btn = QPushButton("⟳  Update to latest version")
+        self._update_btn.setObjectName("success")
+        self._update_btn.setMinimumWidth(280)
+        self._update_btn.clicked.connect(self._run_update)
+        row.addWidget(self._update_btn)
+        row.addStretch()
+        upl.addLayout(row)
+        self._update_output = QTextEdit()
+        self._update_output.setReadOnly(True)
+        self._update_output.setFixedHeight(140)
+        self._update_output.setStyleSheet(
+            f"background:{C['bg']}; color:{C['muted']}; border:1px solid {C['border']};"
+            f"border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11px;")
+        self._update_output.setVisible(False)
+        upl.addWidget(self._update_output)
+        layout.addWidget(upd)
 
         # Log
         log_g = QGroupBox("EVENT LOG")
@@ -1159,6 +1186,46 @@ class _SettingsTab(QWidget):
             QMessageBox.information(self, "Flatseal",
                 "Install with:\n\nflatpak install flathub com.github.tchx84.Flatseal")
 
+    def _run_update(self):
+        from ..core.updater import UpdateWorker, restart_permguard
+        self._update_btn.setEnabled(False)
+        self._update_btn.setText("Updating…")
+        self._update_output.setVisible(True)
+        self._update_output.clear()
+
+        worker = UpdateWorker(self)
+        self._update_worker = worker   # keep alive
+
+        def on_line(msg: str):
+            self._update_output.append(msg)
+            sb = self._update_output.verticalScrollBar()
+            sb.setValue(sb.maximum())
+
+        def on_done(ok: bool, summary: str):
+            self._update_btn.setEnabled(True)
+            self._update_btn.setText("⟳  Update to latest version")
+            if not ok:
+                QMessageBox.warning(self, "Update Failed", summary)
+                return
+            reply = QMessageBox.question(
+                self, "Update Complete",
+                summary + "\n\nRestart PermGuard now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                if restart_permguard():
+                    # systemd will relaunch us shortly — quit cleanly
+                    from PyQt6.QtWidgets import QApplication
+                    QApplication.quit()
+                else:
+                    QMessageBox.information(
+                        self, "Restart",
+                        "Close PermGuard and relaunch it to load the new code.")
+
+        worker.line.connect(on_line)
+        worker.finished_ok.connect(on_done)
+        worker.start()
+
 
 # ── Network Tab (with Block button) ──────────────────────────────────────────
 
@@ -1216,7 +1283,7 @@ class _NetworkTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers)-1, 120)
+        tbl.setColumnWidth(len(headers)-1, 140)
 
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
@@ -1226,7 +1293,7 @@ class _NetworkTab(QWidget):
             blocked = is_blocked(name)
             btn = QPushButton("Unblock" if blocked else "Block Net")
             btn.setObjectName("success" if blocked else "danger")
-            btn.setFixedWidth(110)
+            btn.setMinimumWidth(120)
             btn.clicked.connect(lambda _, p=pid, n=name, b=blocked: self._toggle(p, n, b))
             tbl.setCellWidget(r, len(headers)-1, btn)
 
@@ -1268,7 +1335,7 @@ class _USBTab(QWidget):
 
         lockdown_btn = QPushButton("⚠  Disable All USB")
         lockdown_btn.setObjectName("danger")
-        lockdown_btn.setFixedWidth(160)
+        lockdown_btn.setMinimumWidth(210)
         lockdown_btn.clicked.connect(self._lockdown)
         hdr.addWidget(lockdown_btn)
         layout.addLayout(hdr)
@@ -1308,7 +1375,7 @@ class _USBTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(len(headers)-1, 110)
+        tbl.setColumnWidth(len(headers)-1, 130)
 
         for r, p in enumerate(ports):
             authorized = p["authorized"]
@@ -1323,7 +1390,7 @@ class _USBTab(QWidget):
 
             btn = QPushButton("Enable" if not authorized else "Disable")
             btn.setObjectName("success" if not authorized else "danger")
-            btn.setFixedWidth(100)
+            btn.setMinimumWidth(110)
             dev_id = p["id"]
             btn.clicked.connect(lambda _, d=dev_id, a=authorized: self._toggle(d, a))
             tbl.setCellWidget(r, len(headers)-1, btn)
@@ -1376,7 +1443,7 @@ class _FirewallTab(QWidget):
 
         clr_btn = QPushButton("Clear All Rules")
         clr_btn.setObjectName("danger")
-        clr_btn.setFixedWidth(140)
+        clr_btn.setMinimumWidth(170)
         clr_btn.clicked.connect(self._clear_all)
         hdr.addWidget(clr_btn)
         layout.addLayout(hdr)
@@ -1426,7 +1493,7 @@ class _FirewallTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(3, 100)
+        tbl.setColumnWidth(3, 130)
 
         for r, rule in enumerate(rules):
             tbl.setItem(r, 0, QTableWidgetItem(rule["name"]))
@@ -1434,7 +1501,7 @@ class _FirewallTab(QWidget):
             tbl.setItem(r, 2, QTableWidgetItem(str(rule.get("pid", "?"))))
             btn = QPushButton("Unblock")
             btn.setObjectName("success")
-            btn.setFixedWidth(90)
+            btn.setMinimumWidth(100)
             name = rule["name"]
             btn.clicked.connect(lambda _, n=name: self._unblock(n))
             tbl.setCellWidget(r, 3, btn)
@@ -1507,7 +1574,7 @@ class _FileAccessTab(QWidget):
             f"border-radius:6px; padding:6px 10px; font-size:13px;")
         add_btn = QPushButton("+ Add")
         add_btn.setObjectName("success")
-        add_btn.setFixedWidth(80)
+        add_btn.setMinimumWidth(90)
         add_btn.clicked.connect(self._add_path)
         self._path_input.returnPressed.connect(self._add_path)
         add_row.addWidget(self._path_input)

@@ -1,7 +1,7 @@
 """
 system.py — Low-level system helpers: process info, device control, shell.
 """
-import os, re, subprocess, json
+import os, re, subprocess, json, tempfile
 from pathlib import Path
 
 _STATE_FILE = Path.home() / ".local/share/permguard/device_state.json"
@@ -13,14 +13,22 @@ def _load_state() -> dict:
         return {}
 
 def _save_state(key: str, value: bool):
+    """Atomic write so a crash mid-save can't corrupt the state file."""
     _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     s = _load_state()
     s[key] = value
-    _STATE_FILE.write_text(json.dumps(s))
+    fd, tmp = tempfile.mkstemp(prefix=".tmp_", dir=str(_STATE_FILE.parent))
     try:
-        os.chmod(_STATE_FILE, 0o600)
-    except OSError:
-        pass
+        os.write(fd, json.dumps(s).encode())
+        os.close(fd)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, _STATE_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ── Shell ─────────────────────────────────────────────────────────────────────
