@@ -1119,6 +1119,7 @@ class _SettingsTab(QWidget):
         upd.setFixedHeight(140)
         self._update_group = upd
         layout.addWidget(upd)
+        layout.addSpacing(18)
 
         # Log
         log_g = QGroupBox("EVENT LOG")
