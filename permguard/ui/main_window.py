@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
                 self._tray.showMessage(
                     "PermGuard",
                     f"{evt.app_name} was {verb} {evt.resource} access.",
-                    QSystemTrayIcon.MessageIcon.Information, 3000
+                    QSystemTrayIcon.MessageIcon.Information, 6000
                 )
 
         dlg.decided.connect(on_decision)
@@ -300,12 +300,21 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction(quit_a)
         self._tray.setContextMenu(menu)
-        self._tray.activated.connect(
-            lambda r: self.show() if r == QSystemTrayIcon.ActivationReason.Trigger else None)
+        self._tray.activated.connect(self._on_tray_activated)
         self._tray_ok = QSystemTrayIcon.isSystemTrayAvailable()
         self._tray_indicator_state = ""  # "", "cam", "mic", "both"
         if self._tray_ok:
             self._tray.show()
+
+    def _on_tray_activated(self, reason):
+        if reason != QSystemTrayIcon.ActivationReason.Trigger:
+            return
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+            return
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def _make_indicator_icon(self, cam_live: bool, mic_live: bool) -> QIcon:
         """Overlay colored dots on the tray icon to indicate live cam/mic."""
@@ -405,7 +414,7 @@ class MainWindow(QMainWindow):
         if self._tray_ok:
             self._tray.showMessage("PermGuard",
                 "Monitoring in background. Right-click tray icon → Quit to exit.",
-                QSystemTrayIcon.MessageIcon.Information, 3000)
+                QSystemTrayIcon.MessageIcon.Information, 6000)
         else:
             self.showMinimized()
 
@@ -866,7 +875,18 @@ class _PermissionsTab(QWidget):
     def _toggle_rule(self, app: str, resource: str, current: str):
         new = "deny" if current == "allow" else "allow"
         self.db.set(app, resource, new)
+        self.db.log(f"Rule changed: {app} → {resource} = {new}")
         self.refresh()
+        if new == "allow":
+            QMessageBox.information(
+                self, "Rule updated",
+                f"{app} can now access {resource.replace('_', ' ')}.\n\n"
+                "If the app was running when you denied it, it was stopped "
+                "and needs to be relaunched to regain access.")
+        else:
+            QMessageBox.information(
+                self, "Rule updated",
+                f"{app} will now be blocked from {resource.replace('_', ' ')}.")
 
     def _revoke_all_for_app(self, app: str):
         self.db.remove(app)
@@ -1187,11 +1207,45 @@ class _SettingsTab(QWidget):
             AUTOSTART_FILE.unlink(missing_ok=True)
 
     def _open_flatseal(self):
+        import shutil
+        if not shutil.which("flatpak"):
+            QMessageBox.warning(
+                self, "Flatpak not installed",
+                "Flatpak isn't installed on this system.\n\n"
+                "Install it first with your package manager, then install "
+                "Flatseal:\n\nflatpak install flathub com.github.tchx84.Flatseal")
+            return
+        # Check whether Flatseal is installed (list --app returns the app id)
         try:
-            subprocess.Popen(["flatpak", "run", "com.github.tchx84.Flatseal"])
+            out = subprocess.run(
+                ["flatpak", "list", "--app", "--columns=application"],
+                capture_output=True, text=True, timeout=5)
+            installed = "com.github.tchx84.Flatseal" in out.stdout
         except Exception:
-            QMessageBox.information(self, "Flatseal",
-                "Install with:\n\nflatpak install flathub com.github.tchx84.Flatseal")
+            installed = False
+        if not installed:
+            reply = QMessageBox.question(
+                self, "Flatseal not installed",
+                "Flatseal is not installed.\n\n"
+                "Do you want to install it now from Flathub?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                try:
+                    subprocess.Popen(
+                        ["x-terminal-emulator", "-e",
+                         "flatpak install -y flathub com.github.tchx84.Flatseal"])
+                except FileNotFoundError:
+                    QMessageBox.information(
+                        self, "Install Flatseal",
+                        "Run this in a terminal:\n\n"
+                        "flatpak install -y flathub com.github.tchx84.Flatseal")
+            return
+        try:
+            subprocess.Popen(
+                ["flatpak", "run", "com.github.tchx84.Flatseal"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            QMessageBox.warning(self, "Could not launch Flatseal", str(e))
 
     def _run_update(self):
         from ..core.updater import UpdateWorker, restart_permguard

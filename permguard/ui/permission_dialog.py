@@ -64,7 +64,7 @@ class PermissionDialog(QDialog):
     """
     decided = pyqtSignal(str, bool)
 
-    AUTO_DENY_SECS = 30
+    AUTO_DENY_SECS = 60
 
     def __init__(self, app_name: str, pid: str, resource: str,
                  cmdline: str = "", stream_index: str = "", parent=None):
