@@ -1381,8 +1381,8 @@ class _NetworkTab(QWidget):
         tbl.setColumnWidth(len(headers)-1, 140)
         row_h = 40
         tbl.verticalHeader().setDefaultSectionSize(row_h)
-        natural = tbl.horizontalHeader().height() + row_h * len(rows) + 4
-        tbl.setMaximumHeight(min(natural, 520))
+        natural = tbl.horizontalHeader().height() + row_h * len(rows) + 8
+        tbl.setMaximumHeight(natural)
 
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
@@ -1486,8 +1486,8 @@ class _USBTab(QWidget):
         tbl.setColumnWidth(len(headers)-1, 120)
         row_h = 40
         tbl.verticalHeader().setDefaultSectionSize(row_h)
-        natural = tbl.horizontalHeader().height() + row_h * len(ports) + 4
-        tbl.setMaximumHeight(min(natural, 520))
+        natural = tbl.horizontalHeader().height() + row_h * len(ports) + 8
+        tbl.setMaximumHeight(natural)
 
         for r, p in enumerate(ports):
             authorized = p["authorized"]
