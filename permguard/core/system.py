@@ -47,9 +47,18 @@ def run_privileged(cmd: list, stdin_data: str | None = None) -> tuple[bool, str]
         r = subprocess.run(
             ["pkexec"] + cmd,
             input=stdin_data,
-            capture_output=True, text=True, timeout=15,
+            capture_output=True, text=True, timeout=90,
         )
-        return r.returncode == 0, r.stderr.strip()
+        if r.returncode == 0:
+            return True, ""
+        # pkexec exits 126 when the user dismisses/cancels the auth dialog,
+        # and 127 when no auth agent is available. Translate to something
+        # friendlier than the raw polkit stderr.
+        if r.returncode in (126, 127):
+            return False, "Authorization was cancelled or not granted."
+        return False, r.stderr.strip() or f"Command failed (exit {r.returncode})."
+    except subprocess.TimeoutExpired:
+        return False, "Authorization timed out. Please try again."
     except FileNotFoundError:
         # pkexec not available, try sudo
         try:
