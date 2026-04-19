@@ -770,6 +770,7 @@ class _PermissionsTab(QWidget):
         for app_name, perms in sorted(apps.items()):
             card = self._make_app_card(app_name, perms, last_seen.get(app_name))
             self._body.addWidget(card)
+        self._body.addStretch()
 
     def _make_app_card(self, app_name: str, perms: list[tuple[str, str]],
                        last_seen_ts: str | None) -> QFrame:
@@ -1347,7 +1348,10 @@ class _NetworkTab(QWidget):
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
         tbl.setColumnWidth(len(headers)-1, 140)
-        tbl.verticalHeader().setDefaultSectionSize(40)
+        row_h = 40
+        tbl.verticalHeader().setDefaultSectionSize(row_h)
+        natural = tbl.horizontalHeader().height() + row_h * len(rows) + 4
+        tbl.setMaximumHeight(min(natural, 520))
 
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
@@ -1362,6 +1366,7 @@ class _NetworkTab(QWidget):
             tbl.setCellWidget(r, len(headers)-1, btn)
 
         self._body.addWidget(tbl)
+        self._body.addStretch()
 
     def _toggle(self, pid, name, currently_blocked):
         if currently_blocked:
@@ -1441,7 +1446,10 @@ class _USBTab(QWidget):
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
         tbl.setColumnWidth(len(headers)-1, 120)
-        tbl.verticalHeader().setDefaultSectionSize(40)
+        row_h = 40
+        tbl.verticalHeader().setDefaultSectionSize(row_h)
+        natural = tbl.horizontalHeader().height() + row_h * len(ports) + 4
+        tbl.setMaximumHeight(min(natural, 520))
 
         for r, p in enumerate(ports):
             authorized = p["authorized"]
@@ -1462,6 +1470,7 @@ class _USBTab(QWidget):
             tbl.setCellWidget(r, len(headers)-1, btn)
 
         self._body.addWidget(tbl)
+        self._body.addStretch()
 
     def _toggle(self, device_id: str, currently_authorized: bool):
         action = "disable" if currently_authorized else "enable"
@@ -1549,6 +1558,7 @@ class _FirewallTab(QWidget):
             lbl.setStyleSheet(f"color:{C['muted']}; padding:24px;")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._body.addWidget(lbl)
+            self._body.addStretch()
             return
 
         tbl = QTableWidget(len(rules), 4)
@@ -1559,7 +1569,10 @@ class _FirewallTab(QWidget):
         hdr = tbl.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        tbl.setColumnWidth(3, 130)
+        tbl.setColumnWidth(3, 120)
+        row_h = 40
+        tbl.verticalHeader().setDefaultSectionSize(row_h)
+        tbl.setFixedHeight(tbl.horizontalHeader().height() + row_h * len(rules) + 4)
 
         for r, rule in enumerate(rules):
             tbl.setItem(r, 0, QTableWidgetItem(rule["name"]))
@@ -1567,13 +1580,13 @@ class _FirewallTab(QWidget):
             tbl.setItem(r, 2, QTableWidgetItem(str(rule.get("pid", "?"))))
             btn = QPushButton("Unblock")
             btn.setObjectName("success")
-            btn.setMinimumWidth(110)
-            btn.setMinimumHeight(30)
+            btn.setFixedSize(100, 30)
             name = rule["name"]
             btn.clicked.connect(lambda _, n=name: self._unblock(n))
             tbl.setCellWidget(r, 3, btn)
 
         self._body.addWidget(tbl)
+        self._body.addStretch()
 
     def _unblock(self, name: str):
         ok, err = unblock_app(name)
