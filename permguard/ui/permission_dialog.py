@@ -22,7 +22,7 @@ RESOURCE_META = {
         "color": C["danger"],
     },
     "microphone": {
-        "icon":  "🎤",
+        "icon":  "🎙",
         "label": "Microphone",
         "desc":  "record audio from your microphone",
         "color": C["warning"],
@@ -34,7 +34,7 @@ RESOURCE_META = {
         "color": C["purple"],
     },
     "filesystem": {
-        "icon":  "📂",
+        "icon":  "📁",
         "label": "File Access",
         "desc":  "read files in a protected directory",
         "color": C["warning"],
