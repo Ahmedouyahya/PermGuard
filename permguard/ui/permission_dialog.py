@@ -34,7 +34,7 @@ RESOURCE_META = {
         "color": C["purple"],
     },
     "filesystem": {
-        "icon":  "📄",
+        "icon":  "🗂",
         "label": "File Access",
         "desc":  "read files in a protected directory",
         "color": C["warning"],
