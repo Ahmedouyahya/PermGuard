@@ -292,12 +292,12 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(self._mic_tab,  "🎙  Mic")
         self._tabs.addTab(self._scr_tab,  "🖥  Screen")
         self._tabs.addTab(self._net_tab,  "🌐  Network")
-        self._tabs.addTab(self._usb_tab,  "💾  USB")
+        self._tabs.addTab(self._usb_tab,  "🖨  USB")
         self._tabs.addTab(self._port_tab, "🔒  Ports")
         self._tabs.addTab(self._proc_tab, "⚙️  Processes")
         self._tabs.addTab(self._fw_tab,   "🔥  Firewall")
-        self._tabs.addTab(self._file_tab, "📁  Files")
-        self._tabs.addTab(self._perm_tab, "🛂  Permissions")
+        self._tabs.addTab(self._file_tab, "📄  Files")
+        self._tabs.addTab(self._perm_tab, "🔐  Permissions")
         self._tabs.addTab(self._sett_tab, "⚙  Settings")
 
         self._dash.switch_tab.connect(self._tabs.setCurrentIndex)
@@ -455,7 +455,7 @@ class MainWindow(QMainWindow):
 
 _RESOURCE_ICONS = {
     "camera": "📷", "microphone": "🎙", "screen": "🖥",
-    "filesystem": "📁", "package_install": "📦", "clipboard": "📋",
+    "filesystem": "📄", "package_install": "📦", "clipboard": "📋",
 }
 _RESOURCE_COLORS = {
     "camera": C["danger"], "microphone": C["warning"], "screen": C["purple"],
@@ -502,7 +502,7 @@ class _DashboardTab(QWidget):
             "mic":     StatCard("🎙", "Mic Access",      C["danger"]),
             "screen":  StatCard("🖥", "Screen Share",    C["warning"]),
             "network": StatCard("🌐", "Network Conns",   C["accent"]),
-            "usb":     StatCard("💾", "USB Devices",     C["purple"]),
+            "usb":     StatCard("🖨", "USB Devices",     C["purple"]),
             "ports":   StatCard("🔒", "Open Ports",      C["warning"]),
         }
         positions  = [(0,0),(0,1),(0,2),(1,0),(1,1),(1,2)]
@@ -722,7 +722,7 @@ class _PermissionsTab(QWidget):
         hdr_layout.setSpacing(12)
 
         hdr = QHBoxLayout()
-        ico = QLabel("🛂")
+        ico = QLabel("🔐")
         ico.setFont(QFont("Noto Color Emoji", 20))
         ico.setFixedWidth(32)
         ttl = QLabel("App Permissions")
@@ -799,7 +799,7 @@ class _PermissionsTab(QWidget):
             from .widgets import _EmptyState
             self._body.addWidget(_EmptyState(
                 "No saved rules yet — dialogs will appear when apps request access",
-                icon="🛂"
+                icon="🔐"
             ))
             return
 
@@ -1456,7 +1456,7 @@ class _USBTab(QWidget):
         layout.setSpacing(10)
 
         hdr = QHBoxLayout()
-        ico = QLabel("💾"); ico.setFont(QFont("Noto Color Emoji", 18))
+        ico = QLabel("🖨"); ico.setFont(QFont("Noto Color Emoji", 18))
         ttl = QLabel("USB Devices")
         ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
         ttl.setStyleSheet(f"color:{C['accent']};")
@@ -1710,7 +1710,7 @@ class _FileAccessTab(QWidget):
         # Header
         hdr = QHBoxLayout()
         hdr.setSpacing(14)
-        ico = QLabel("📁"); ico.setFont(QFont("Noto Color Emoji", 20)); ico.setFixedWidth(32)
+        ico = QLabel("📄"); ico.setFont(QFont("Noto Color Emoji", 20)); ico.setFixedWidth(32)
         ttl = QLabel("File Access Control")
         ttl.setFont(QFont("Inter", 15, QFont.Weight.Bold))
         ttl.setStyleSheet(f"color:{C['text']};")
