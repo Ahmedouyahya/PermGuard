@@ -113,7 +113,8 @@ class PermTab(QWidget):
     """A tab that displays a list of active accesses with optional Kill buttons."""
 
     def __init__(self, icon: str, title: str, desc: str,
-                 data_fn, headers: list, kill_col: int | None = None):
+                 data_fn, headers: list, kill_col: int | None = None,
+                 help_text: str | None = None):
         super().__init__()
         self.data_fn  = data_fn
         self.headers  = headers
@@ -144,6 +145,8 @@ class PermTab(QWidget):
         hdr.addWidget(ico)
         hdr.addLayout(text_col)
         hdr.addStretch()
+        if help_text:
+            hdr.addWidget(help_icon(help_text))
         hdr.addWidget(self._badge_lbl)
         layout.addLayout(hdr)
         layout.addWidget(hsep())

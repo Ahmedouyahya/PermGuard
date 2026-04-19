@@ -250,15 +250,37 @@ class MainWindow(QMainWindow):
 
         self._dash     = _DashboardTab(self.db)
         self._cam_tab  = PermTab("📷", "Camera",       "Apps accessing your webcam",
-                                  get_camera_users, ["PID","Process","User","Command"], kill_col=0)
+                                  get_camera_users, ["PID","Process","User","Command"], kill_col=0,
+                                  help_text=(
+                                      "Every process that currently has a /dev/video* device\n"
+                                      "open. Detected by scanning /proc/<pid>/fd for symlinks\n"
+                                      "to the webcam node.\n\n"
+                                      "Kill terminates the process (SIGTERM then SIGKILL).\n"
+                                      "Zombie processes are filtered out automatically."))
         self._mic_tab  = PermTab("🎤", "Microphone",   "Apps capturing audio input",
-                                  get_mic_users,    ["PID","App Name","User","Command"], kill_col=0)
+                                  get_mic_users,    ["PID","App Name","User","Command"], kill_col=0,
+                                  help_text=(
+                                      "Every app that currently holds a PulseAudio/PipeWire\n"
+                                      "source-output (microphone stream). Read via 'pactl\n"
+                                      "list source-outputs'.\n\n"
+                                      "Kill terminates the owning process. Streams pinned\n"
+                                      "by zombie processes are auto-dropped on each poll."))
         self._scr_tab  = PermTab("🖥", "Screen Share", "Active screen recording / sharing",
-                                  get_screen_share, ["PID","Service","Info"])
+                                  get_screen_share, ["PID","Service","Info"],
+                                  help_text=(
+                                      "Detects active screen capture via PipeWire nodes and\n"
+                                      "xdg-desktop-portal screencast sessions.\n\n"
+                                      "Common triggers: video calls (Zoom, Meet, Jitsi),\n"
+                                      "OBS, Spectacle, GNOME/KDE screen recorders."))
         self._net_tab  = _NetworkTab()
         self._usb_tab  = _USBTab()
         self._port_tab = PermTab("🔒", "Open Ports",   "Listening ports on this machine",
-                                  get_open_ports,   ["Proto","Address","Process","PID"])
+                                  get_open_ports,   ["Proto","Address","Process","PID"],
+                                  help_text=(
+                                      "TCP/UDP sockets currently in LISTEN state. Useful\n"
+                                      "for spotting unexpected services (like a dev server\n"
+                                      "you forgot to stop) or daemons bound to 0.0.0.0.\n\n"
+                                      "Data source: /proc/net/{tcp,udp,tcp6,udp6}."))
         self._proc_tab = _ProcessTab()
         self._fw_tab   = _FirewallTab()
         self._file_tab = _FileAccessTab(self.db)
@@ -715,6 +737,13 @@ class _PermissionsTab(QWidget):
         hdr.addWidget(ico)
         hdr.addLayout(left)
         hdr.addStretch()
+        hdr.addWidget(help_icon(
+            "Every rule you've saved: 'allow', 'deny', or 'ask-again'.\n"
+            "Rules are keyed on the app name + resource (camera,\n"
+            "microphone, filesystem, etc).\n\n"
+            "Switch a rule to flip allow↔deny. Use the × button to\n"
+            "revoke a rule so PermGuard asks again next time.\n\n"
+            "Rules are stored in ~/.config/permguard/permissions.json."))
 
         add_btn = QPushButton("+ Add Rule")
         add_btn.setObjectName("success")
@@ -1340,6 +1369,14 @@ class _NetworkTab(QWidget):
         left = QVBoxLayout(); left.setSpacing(2)
         left.addWidget(ttl); left.addWidget(sub)
         hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+        hdr.addWidget(help_icon(
+            "Every established TCP/UDP connection on this machine,\n"
+            "matched to the process that owns it via /proc/net and\n"
+            "/proc/<pid>/fd.\n\n"
+            "Block Net adds an iptables OUTPUT rule for the app's UID\n"
+            "and kills its existing sockets. Unblock reverses it.\n\n"
+            "Blocks persist in ~/.config/permguard/firewall.json and\n"
+            "are re-applied on startup."))
         layout.addLayout(hdr)
         layout.addWidget(hsep())
 
@@ -1428,6 +1465,13 @@ class _USBTab(QWidget):
         left = QVBoxLayout(); left.setSpacing(2)
         left.addWidget(ttl); left.addWidget(sub)
         hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+        hdr.addWidget(help_icon(
+            "Lists every USB device currently connected. Each device\n"
+            "exposes an 'authorized' file under /sys/bus/usb/devices/\n"
+            "which the kernel honors — writing 0 disables it and the\n"
+            "device disappears from the system until re-enabled.\n\n"
+            "Be careful with keyboards and mice — disabling yours may\n"
+            "leave you unable to re-enable it unless you have another."))
 
         lockdown_btn = QPushButton("⚠  Disable All USB")
         lockdown_btn.setObjectName("danger")
@@ -1545,6 +1589,13 @@ class _FirewallTab(QWidget):
         left = QVBoxLayout(); left.setSpacing(2)
         left.addWidget(ttl); left.addWidget(sub)
         hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+        hdr.addWidget(help_icon(
+            "Shows every iptables OUTPUT rule PermGuard has installed\n"
+            "for a blocked app. Each rule is matched by UID (owner of\n"
+            "the process), so it survives PID changes.\n\n"
+            "Unblock removes the rule and lets the app hit the network\n"
+            "again. Rules persist across reboots — re-applied at app\n"
+            "startup by restore_rules_on_startup()."))
 
         clr_btn = QPushButton("Clear All Rules")
         clr_btn.setObjectName("danger")
@@ -1668,6 +1719,14 @@ class _FileAccessTab(QWidget):
         left = QVBoxLayout(); left.setSpacing(2)
         left.addWidget(ttl); left.addWidget(sub)
         hdr.addWidget(ico); hdr.addLayout(left); hdr.addStretch()
+        hdr.addWidget(help_icon(
+            "Watches a list of sensitive directories (SSH keys, GPG,\n"
+            "browser profiles, ~/Documents, etc). When any process\n"
+            "opens a file inside them, a permission dialog appears\n"
+            "just like for camera/mic.\n\n"
+            "Backed by fanotify where available; paths and decisions\n"
+            "persist in ~/.config/permguard/permissions.json.\n\n"
+            "Add/remove paths below to change what's watched."))
         layout.addLayout(hdr)
         layout.addWidget(hsep())
 
