@@ -95,7 +95,8 @@ _VIDEO_RE = re.compile(r"/dev/video\d+$")
 
 def get_camera_pids() -> set[str]:
     """Find PIDs with an open file descriptor to any /dev/video* device.
-    Reads /proc/<pid>/fd symlinks directly — no subprocess."""
+    Reads /proc/<pid>/fd symlinks directly — no subprocess.
+    Zombie PIDs are skipped so a dead app doesn't keep the red dot lit."""
     pids: set[str] = set()
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
@@ -104,7 +105,8 @@ def get_camera_pids() -> set[str]:
             for fd in os.listdir(f"/proc/{pid}/fd"):
                 try:
                     if _VIDEO_RE.match(os.readlink(f"/proc/{pid}/fd/{fd}")):
-                        pids.add(pid)
+                        if _pid_is_live(pid):
+                            pids.add(pid)
                         break
                 except OSError:
                     pass
@@ -119,8 +121,38 @@ def get_camera_users() -> list[tuple]:
 
 # ── Microphone ────────────────────────────────────────────────────────────────
 
+def _pid_is_live(pid: str) -> bool:
+    """True only if the PID exists AND isn't a zombie. Zombies keep
+    PulseAudio source-outputs pinned even after the app is 'closed'."""
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("State:"):
+                return "Z" not in line.split(":", 1)[1]
+        return True
+    except OSError:
+        return False
+
+
+def _drop_pactl_stream(stream_index: str):
+    """Tell PulseAudio to forget a source-output. Used for streams whose
+    owner process has died or gone zombie but left the stream pinned."""
+    import shutil, subprocess
+    if not shutil.which("pactl") or not stream_index or stream_index == "?":
+        return
+    try:
+        subprocess.run(
+            ["pactl", "kill-source-output", stream_index],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+    except Exception:
+        pass
+
+
 def get_mic_streams() -> list[dict]:
-    """PipeWire/PulseAudio source-output streams (via pactl)."""
+    """PipeWire/PulseAudio source-output streams (via pactl).
+
+    Streams whose owning PID is dead or zombie get dropped from
+    PulseAudio as a side effect, so the live-mic indicator clears
+    automatically instead of hanging on stale entries."""
     import shutil
     results: list[dict] = []
     if not shutil.which("pactl"):
@@ -133,8 +165,12 @@ def get_mic_streams() -> list[dict]:
         if not pid_m:
             continue
         pid = pid_m.group(1)
+        stream_idx = idx_m.group(1) if idx_m else "?"
+        if not _pid_is_live(pid):
+            _drop_pactl_stream(stream_idx)
+            continue
         results.append({
-            "stream_index": idx_m.group(1) if idx_m else "?",
+            "stream_index": stream_idx,
             "pid":          pid,
             "app_name":     name_m.group(1) if name_m else proc_name(pid),
             "cmdline":      proc_cmdline(pid),
