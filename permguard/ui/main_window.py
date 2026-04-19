@@ -1379,10 +1379,7 @@ class _NetworkTab(QWidget):
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
         tbl.setColumnWidth(len(headers)-1, 140)
-        row_h = 40
-        tbl.verticalHeader().setDefaultSectionSize(row_h)
-        natural = tbl.horizontalHeader().height() + row_h * len(rows) + 8
-        tbl.setMaximumHeight(natural)
+        tbl.verticalHeader().setDefaultSectionSize(38)
 
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
@@ -1397,7 +1394,6 @@ class _NetworkTab(QWidget):
             tbl.setCellWidget(r, len(headers)-1, btn)
 
         self._body.addWidget(tbl)
-        self._body.addStretch()
 
     def _toggle(self, pid, name, currently_blocked):
         if currently_blocked:
@@ -1484,10 +1480,7 @@ class _USBTab(QWidget):
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(len(headers)-1, QHeaderView.ResizeMode.Fixed)
         tbl.setColumnWidth(len(headers)-1, 120)
-        row_h = 40
-        tbl.verticalHeader().setDefaultSectionSize(row_h)
-        natural = tbl.horizontalHeader().height() + row_h * len(ports) + 8
-        tbl.setMaximumHeight(natural)
+        tbl.verticalHeader().setDefaultSectionSize(38)
 
         for r, p in enumerate(ports):
             authorized = p["authorized"]
@@ -1508,7 +1501,6 @@ class _USBTab(QWidget):
             tbl.setCellWidget(r, len(headers)-1, btn)
 
         self._body.addWidget(tbl)
-        self._body.addStretch()
 
     def _toggle(self, device_id: str, currently_authorized: bool):
         action = "disable" if currently_authorized else "enable"
