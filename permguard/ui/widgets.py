@@ -21,6 +21,23 @@ def hsep() -> QFrame:
     return f
 
 
+def help_icon(tooltip: str) -> QLabel:
+    """Small circular '?' label that shows a tooltip on hover.
+    Use to explain what a control does without cluttering the UI."""
+    lbl = QLabel("?")
+    lbl.setToolTip(tooltip)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setFixedSize(18, 18)
+    lbl.setCursor(Qt.CursorShape.WhatsThisCursor)
+    lbl.setStyleSheet(
+        f"QLabel {{ background:{C['surface']}; color:{C['muted']};"
+        f"border:1px solid {C['border']}; border-radius:9px;"
+        f"font-size:11px; font-weight:700; }}"
+        f"QLabel:hover {{ color:{C['accent']}; border-color:{C['accent']}; }}"
+    )
+    return lbl
+
+
 def badge(text: str, color: str) -> QLabel:
     lbl = QLabel(text)
     fg = C["bg"] if color not in (C["danger"], C["purple"]) else "white"

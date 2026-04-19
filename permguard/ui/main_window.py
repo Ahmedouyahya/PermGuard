@@ -16,7 +16,7 @@ from PyQt6.QtCore  import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui   import QFont, QIcon, QAction, QColor, QPixmap, QPainter, QBrush
 
 from .styles      import C, MAIN_STYLE
-from .widgets     import PermTab, StatCard, hsep, build_table
+from .widgets     import PermTab, StatCard, hsep, build_table, help_icon
 from .permission_dialog import PermissionDialog, DECISION_ALLOW, DECISION_ONCE, DECISION_DENY
 from ..core.data  import (get_camera_users, get_mic_users, get_screen_share,
                            get_network_conns, get_open_ports, get_usb_devices, get_top_procs,
@@ -505,7 +505,17 @@ class _DashboardTab(QWidget):
         self._cam_btn.clicked.connect(self._toggle_cam)
         self._mic_btn.clicked.connect(self._toggle_mic)
         blk_row.addWidget(self._cam_btn)
+        blk_row.addWidget(help_icon(
+            "Hardware-level camera kill switch.\n\n"
+            "Runs 'chmod 000' on /dev/video* so no app can open the\n"
+            "webcam until you unblock it here. Requires pkexec (you\n"
+            "will be asked for your password)."))
         blk_row.addWidget(self._mic_btn)
+        blk_row.addWidget(help_icon(
+            "Suspends every PulseAudio/PipeWire source so no app can\n"
+            "capture audio. Unblocking re-enables them.\n\n"
+            "This is a soft mute — apps aren't killed, they just get\n"
+            "silence until you toggle it back."))
         blk_row.addStretch()
         layout.addLayout(blk_row)
         self._update_block_btns()
@@ -711,6 +721,11 @@ class _PermissionsTab(QWidget):
         add_btn.setMinimumWidth(120)
         add_btn.clicked.connect(self._add_rule_dialog)
         hdr.addWidget(add_btn)
+        hdr.addWidget(help_icon(
+            "Pre-authorise (or pre-deny) an app for a resource without\n"
+            "waiting for it to ask. Useful if you know exactly which\n"
+            "apps should or shouldn't have access — no prompt dialog\n"
+            "will appear for rules you've added here."))
         hdr_layout.addLayout(hdr)
         hdr_layout.addWidget(hsep())
         layout.addWidget(hdr_widget)
@@ -1102,10 +1117,20 @@ class _SettingsTab(QWidget):
         fp = QGroupBox("FLATPAK APP SANDBOX")
         fpl = QVBoxLayout(fp)
         fpl.addWidget(QLabel("Manage Flatpak app permissions (camera, mic, filesystem…)"))
+        fp_row = QHBoxLayout()
         fsb = QPushButton("Open Flatseal")
         fsb.setMinimumWidth(160)
         fsb.clicked.connect(self._open_flatseal)
-        fpl.addWidget(fsb)
+        fp_row.addWidget(fsb)
+        fp_row.addWidget(help_icon(
+            "Flatseal is a GUI for editing Flatpak-app permissions\n"
+            "(camera, mic, filesystem, network, D-Bus, etc).\n\n"
+            "PermGuard controls the system-wide resources; Flatseal\n"
+            "edits the per-app sandbox of installed Flatpak apps.\n\n"
+            "If Flatseal isn't installed, this button will offer to\n"
+            "install it from Flathub."))
+        fp_row.addStretch()
+        fpl.addLayout(fp_row)
         layout.addWidget(fp)
 
         # Updates
@@ -1127,6 +1152,12 @@ class _SettingsTab(QWidget):
         self._update_btn.setFixedSize(260, 36)
         self._update_btn.clicked.connect(self._run_update)
         row.addWidget(self._update_btn)
+        row.addWidget(help_icon(
+            "Clones the latest source from the PermGuard GitHub repo\n"
+            "to ~/.cache/permguard/source and runs install.sh, which\n"
+            "reinstalls into ~/.local/share/permguard.\n\n"
+            "Progress is streamed into the panel below. When it\n"
+            "finishes successfully, PermGuard will offer to restart."))
         row.addStretch()
         upl.addLayout(row)
         self._update_output = QTextEdit()
@@ -1407,6 +1438,13 @@ class _USBTab(QWidget):
         lockdown_btn.setFixedSize(180, 32)
         lockdown_btn.clicked.connect(self._lockdown)
         hdr.addWidget(lockdown_btn)
+        hdr.addWidget(help_icon(
+            "Panic button: writes 0 to /sys/bus/usb/devices/*/authorized\n"
+            "for every connected USB device. That immediately cuts off\n"
+            "every USB peripheral — keyboard, mouse, drives, webcams.\n\n"
+            "You can re-enable individual devices from the table below\n"
+            "(use a PS/2 keyboard or your laptop's built-in one until\n"
+            "you do — you may need it)."))
         layout.addLayout(hdr)
         layout.addWidget(hsep())
 
@@ -1521,6 +1559,11 @@ class _FirewallTab(QWidget):
         clr_btn.setMinimumWidth(170)
         clr_btn.clicked.connect(self._clear_all)
         hdr.addWidget(clr_btn)
+        hdr.addWidget(help_icon(
+            "Removes every PermGuard-added iptables rule in one go.\n\n"
+            "After this, previously-blocked apps can reach the network\n"
+            "again. Unrelated iptables rules from other tools are not\n"
+            "touched — only rules tagged by PermGuard."))
         layout.addLayout(hdr)
 
         # iptables availability warning
