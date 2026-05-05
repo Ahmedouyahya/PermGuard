@@ -58,7 +58,7 @@ App opens /dev/video0  ──▶  CameraMonitor detects it
                             └─────────────────┘
                                      │
                     ┌────────────────┼──────────────────┐
-                    ▼                ▼                   ▼
+                    ▼                ▼                  ▼
                  Allow           Allow once            Deny
                SIGCONT           SIGCONT             SIGKILL
              (save rule)       (no rule)            (save rule)
